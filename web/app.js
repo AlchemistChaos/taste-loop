@@ -233,6 +233,174 @@
     refs.iframeEmpty.classList.add("hidden");
   }
 
+  // -------- Upskill focus panel (the demo climax) --------
+  // On a rich member.upskilled event we pop a centered panel showing the
+  // v1 -> v2 prompt diff and the lesson that caused it. Gracefully no-ops on
+  // the old/thin event shape (no instructionDiff) so the live engine never breaks.
+  const upskill = {};
+  let upskillWired = false;
+  let upskillTimer = null;
+
+  function upskillRefs() {
+    if (upskill._ready) return upskill;
+    upskill.scrim = $("#upskillScrim");
+    upskill.panel = $("#upskillPanel");
+    upskill.close = $("#upskillClose");
+    upskill.role = $("#upskillRole");
+    upskill.vfrom = $("#upskillVfrom");
+    upskill.vto = $("#upskillVto");
+    upskill.vfrom2 = $("#upskillVfrom2");
+    upskill.vto2 = $("#upskillVto2");
+    upskill.deltaPill = $("#upskillDelta");
+    upskill.scoreBefore = $("#upskillScoreBefore");
+    upskill.scoreAfter = $("#upskillScoreAfter");
+    upskill.scoreDelta = $("#upskillScoreDelta");
+    upskill.lessonCard = $("#upskillLessonCard");
+    upskill.lessonText = $("#upskillLessonText");
+    upskill.before = $("#upskillBefore");
+    upskill.after = $("#upskillAfter");
+    upskill.provenance = $("#upskillProvenance");
+    upskill.provId = $("#upskillProvId");
+    upskill.provDelta = $("#upskillProvDelta");
+    upskill.provRole = $("#upskillProvRole");
+    upskill._ready = !!upskill.panel;
+    return upskill;
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // Word-level diff: render `before` verbatim and `after` with the words that are
+  // new (relative to before) wrapped in a green .diff-add span. Token-based so it
+  // survives reordering reasonably and never throws on odd input.
+  function diffAdditionsHtml(before, after) {
+    const beforeText = before == null ? "" : String(before);
+    const afterText = after == null ? "" : String(after);
+    // Tokenize keeping whitespace so we can faithfully re-emit `after`.
+    const tokens = afterText.split(/(\s+)/);
+    // Multiset of before words (normalized) so repeated words match correctly.
+    const pool = new Map();
+    beforeText.split(/\s+/).forEach((w) => {
+      const k = w.toLowerCase();
+      if (!k) return;
+      pool.set(k, (pool.get(k) || 0) + 1);
+    });
+    let html = "";
+    for (const tok of tokens) {
+      if (!tok) continue;
+      if (/^\s+$/.test(tok)) { html += escapeHtml(tok); continue; }
+      const k = tok.toLowerCase();
+      const have = pool.get(k) || 0;
+      if (have > 0) {
+        pool.set(k, have - 1);
+        html += escapeHtml(tok);
+      } else {
+        html += '<span class="diff-add">' + escapeHtml(tok) + "</span>";
+      }
+    }
+    return html;
+  }
+
+  function closeUpskill() {
+    const u = upskillRefs();
+    if (!u._ready) return;
+    u.scrim.classList.remove("show");
+    u.panel.style.display = "none";
+    if (upskillTimer) { clearTimeout(upskillTimer); upskillTimer = null; }
+  }
+
+  function wireUpskill() {
+    if (upskillWired) return;
+    const u = upskillRefs();
+    if (!u._ready) return;
+    upskillWired = true;
+    u.close.addEventListener("click", closeUpskill);
+    u.scrim.addEventListener("click", closeUpskill);
+    // Click inside the panel (other than the close X) keeps it open, except the
+    // explicit "click anywhere to dismiss" affordance — make the whole panel a
+    // dismiss target too, for a frictionless demo.
+    u.panel.addEventListener("click", (e) => { if (e.target !== u.close) closeUpskill(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeUpskill(); });
+  }
+
+  // Returns true if it rendered a rich panel; false if the event lacked the
+  // rich fields (caller then leaves the legacy behavior untouched).
+  function showUpskillPanel(ev) {
+    const diff = ev && ev.instructionDiff;
+    const hasRich = diff && typeof diff === "object" &&
+      (typeof diff.before === "string" || typeof diff.after === "string");
+    if (!hasRich) return false; // old/thin shape -> ignore gracefully
+
+    const u = upskillRefs();
+    if (!u._ready) return false;
+    wireUpskill();
+
+    const role = ev.role || "agent";
+    const vTo = ev.version != null ? ev.version : "";
+    const vFrom = (typeof ev.version === "number" && ev.version > 1) ? ev.version - 1 : "";
+
+    u.role.textContent = role;
+    u.vfrom.textContent = vFrom !== "" ? "v" + vFrom : "v?";
+    u.vto.textContent = vTo !== "" ? "v" + vTo : "v?";
+    u.vfrom2.textContent = vFrom !== "" ? vFrom : "?";
+    u.vto2.textContent = vTo !== "" ? vTo : "?";
+
+    // Lesson
+    const lessonText = typeof ev.lessonText === "string" ? ev.lessonText.trim() : "";
+    if (lessonText) {
+      u.lessonText.textContent = lessonText;
+      u.lessonCard.style.display = "";
+    } else {
+      u.lessonCard.style.display = "none";
+    }
+
+    // Diff
+    u.before.textContent = diff.before == null ? "" : String(diff.before);
+    u.after.innerHTML = diffAdditionsHtml(diff.before, diff.after);
+
+    // Score delta
+    const sb = ev.scoreBefore, sa = ev.scoreAfter;
+    let delta = null;
+    if (typeof sb === "number" && typeof sa === "number") {
+      delta = sa - sb;
+      u.scoreBefore.textContent = sb;
+      u.scoreAfter.textContent = sa;
+      u.scoreDelta.textContent = (delta >= 0 ? "+" : "") + delta;
+      u.deltaPill.classList.toggle("neg", delta < 0);
+      u.deltaPill.style.display = "";
+    } else {
+      u.deltaPill.style.display = "none";
+    }
+
+    // Provenance: "lesson <id> -> +<delta> on <role>"
+    const lessonId = ev.lessonId != null ? String(ev.lessonId) : "";
+    if (lessonId || delta != null) {
+      u.provId.textContent = lessonId || "?";
+      const provDelta = delta != null ? (delta >= 0 ? "+" : "") + delta : "+?";
+      u.provDelta.textContent = provDelta;
+      u.provRole.textContent = role;
+      u.provenance.style.display = "";
+    } else {
+      u.provenance.style.display = "none";
+    }
+
+    // Show
+    u.scrim.classList.add("show");
+    u.panel.style.display = "";
+    // re-trigger entrance animation
+    u.panel.style.animation = "none";
+    void u.panel.offsetWidth;
+    u.panel.style.animation = "";
+
+    // Auto-dismiss after a beat so the replay keeps flowing, but long enough to read.
+    if (upskillTimer) clearTimeout(upskillTimer);
+    upskillTimer = setTimeout(closeUpskill, 9000);
+    return true;
+  }
+
   // -------- Event application --------
   function applyEvent(ev) {
     const page = ev.page;
@@ -277,6 +445,9 @@
             }
           });
         }
+        // THE CLIMAX: if the rich shape is present, pop the prompt-diff focus
+        // panel. No-ops (returns false) on the old thin shape -> graceful.
+        showUpskillPanel(ev);
         break;
       }
       case "memory.distilled": {
@@ -372,6 +543,7 @@
     });
     updateScoreUI();
     setClock(0);
+    closeUpskill();
   }
 
   async function pollOnce() {

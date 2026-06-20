@@ -47,7 +47,9 @@ const CODEX_BIN = process.env.CODEX_BIN || "codex";
 // Spawn one `codex exec` turn. Resolves with the agent's FINAL message (string)
 // read from the --output-last-message file, or rejects with a descriptive Error.
 // `effort` overrides the default reasoning effort for this turn (e.g. "high").
-function codexExecOnce(prompt, timeoutMs, effort = EFFORT) {
+// `images` is an optional array of image file paths attached via `-i <FILE>` so
+// the model can VISION-judge a rendered screenshot.
+function codexExecOnce(prompt, timeoutMs, effort = EFFORT, images = []) {
   return new Promise((resolve, reject) => {
     let settled = false;
     let lastMsgPath = null;
@@ -72,8 +74,14 @@ function codexExecOnce(prompt, timeoutMs, effort = EFFORT) {
           "--ephemeral",
           "-c", "suppress_unstable_features_warning=true",
           "-o", lastMsgPath,
-          "-", // read prompt from stdin
         ];
+        // Attach any images via `-i/--image <FILE>` (codex exec supports this) so
+        // the model can judge the rendered DESIGN, not just the HTML source.
+        for (const img of images) {
+          if (img) args.push("-i", img);
+        }
+        // Read prompt from stdin (must come last).
+        args.push("-");
 
         let child;
         try {
@@ -152,23 +160,25 @@ function codexExecOnce(prompt, timeoutMs, effort = EFFORT) {
  * Run one Codex turn and return its final text. Retries ONCE on failure, then
  * throws. NEVER returns null / a silent fallback.
  * @param {string} prompt
- * @param {{timeoutMs?:number, effort?:string}} [opts] - `effort` overrides the
- *   default reasoning effort for this run (e.g. "high"); defaults to CODEX_EFFORT.
+ * @param {{timeoutMs?:number, effort?:string, images?:string[]}} [opts] - `effort`
+ *   overrides the default reasoning effort for this run (e.g. "high"); defaults to
+ *   CODEX_EFFORT. `images` is an optional list of image file paths attached via
+ *   `codex exec -i <FILE>` for vision tasks.
  * @returns {Promise<string>} the model's final message text
  */
-export async function codexRun(prompt, { timeoutMs = DEFAULT_TIMEOUT, effort = EFFORT } = {}) {
+export async function codexRun(prompt, { timeoutMs = DEFAULT_TIMEOUT, effort = EFFORT, images = [] } = {}) {
   if (!prompt || !String(prompt).trim()) {
     throw new Error("codexRun: empty prompt");
   }
   let firstErr;
   try {
-    return await codexExecOnce(prompt, timeoutMs, effort);
+    return await codexExecOnce(prompt, timeoutMs, effort, images);
   } catch (err) {
     firstErr = err;
   }
   // single retry
   try {
-    return await codexExecOnce(prompt, timeoutMs, effort);
+    return await codexExecOnce(prompt, timeoutMs, effort, images);
   } catch (err) {
     throw new Error(
       `codexRun failed after 2 attempts.\n  attempt#1: ${firstErr?.message || firstErr}\n  attempt#2: ${err?.message || err}`
@@ -315,10 +325,16 @@ function extractJsonObject(text) {
  * for flawless pages and scores below 70 for ANY brand DON'T violation. Returns
  * ONLY {score:int 0-100, category:string, reasoning:string}. THROWS on failure
  * (no silent fallback). Codex HIGH is slow (~60-90s) so the timeout is 180s.
- * @param {{brand:object, html:string, goal:string}} args
+ *
+ * When `imagePath` is provided, the judge VISIONS the rendered screenshot: the
+ * image is attached via `codex exec -i <FILE>` and the prompt instructs the model
+ * to grade the DESIGN AS SHOWN IN THE IMAGE (with the HTML as supporting context).
+ * When `imagePath` is omitted, it falls back to the text-only HTML judge.
+ *
+ * @param {{brand:object, html:string, goal:string, imagePath?:string}} args
  * @returns {Promise<{score:number, category:string, reasoning:string}>}
  */
-export async function codexJudge({ brand, html, goal }) {
+export async function codexJudge({ brand, html, goal, imagePath }) {
   if (!brand || !brand.colors) throw new Error("codexJudge: missing brand/colors");
   if (!html || !String(html).trim()) throw new Error("codexJudge: missing html");
   if (!goal) throw new Error("codexJudge: missing goal");
@@ -329,28 +345,57 @@ export async function codexJudge({ brand, html, goal }) {
   const audience = brand.audience || "general";
   const headingFont = brand.fonts?.heading || "Inter";
 
-  const prompt =
-    `You are a STRICT senior brand & design judge. Score the marketing page below ` +
-    `from 0 to 100 on how well it serves the goal AND obeys the brand.\n\n` +
+  const brandBlock =
     `GOAL: ${goal}\n` +
     `BRAND: colors primary ${c.primary}, accent ${c.accent}, bg ${c.bg}, text ${c.fg}; ` +
     `font ${headingFont}; tone ${tone}; audience ${audience}.\n` +
-    `BRAND DON'Ts (hard rules): ${JSON.stringify(donts)}.\n\n` +
+    `BRAND DON'Ts (hard rules): ${JSON.stringify(donts)}.\n\n`;
+
+  const rubric =
     `SCORING RUBRIC (be harsh and discriminating):\n` +
     `- Reserve 90-100 ONLY for a flawless page: on-brand, on-tone, strong hierarchy, ` +
     `real persuasive copy, zero issues.\n` +
     `- 70-89: solid but with minor flaws.\n` +
     `- BELOW 70: MANDATORY if the page violates ANY brand DON'T, is off-tone, uses ` +
     `placeholder/lorem copy, or has weak hierarchy. A single DON'T violation caps the ` +
-    `score under 70 no matter how good the rest is.\n\n` +
-    `Inspect the actual HTML/CSS — check colors used, copy tone, banned patterns, and ` +
-    `whether brand DON'Ts appear. Do not be generous.\n\n` +
-    `PAGE HTML:\n<<<HTML\n${html}\nHTML\n\n` +
+    `score under 70 no matter how good the rest is.\n\n`;
+
+  const jsonInstr =
     `Return ONLY a JSON object, no prose, no markdown fences:\n` +
     `{"score": <integer 0-100>, "category": "<short verdict label>", "reasoning": "<1-3 sentences citing concrete evidence>"}`;
 
-  // HIGH reasoning is slow; give it 180s.
-  const raw = await codexRun(prompt, { effort: "high", timeoutMs: 180_000 });
+  const useImage = Boolean(imagePath && String(imagePath).trim());
+
+  const prompt = useImage
+    ? // VISION path: grade the DESIGN IN THE ATTACHED IMAGE.
+      `You are a STRICT senior brand & design judge. The ATTACHED IMAGE is a ` +
+      `screenshot of a rendered marketing page. Score the DESIGN IN THE IMAGE ` +
+      `from 0 to 100 on how well it serves the goal AND obeys the brand.\n\n` +
+      brandBlock +
+      rubric +
+      `Judge what you actually SEE in the image: real layout, visual hierarchy, ` +
+      `the colors as rendered, legibility, copy tone, and whether any brand DON'T ` +
+      `is visibly present (e.g. gradients, generic stock, tiny text). Be strict ` +
+      `against the brand DON'Ts. Do not be generous. The HTML below is supporting ` +
+      `context only — your verdict is about the rendered design in the image.\n\n` +
+      `SUPPORTING HTML (context):\n<<<HTML\n${html}\nHTML\n\n` +
+      jsonInstr
+    : // TEXT path: grade the HTML source (unchanged behavior).
+      `You are a STRICT senior brand & design judge. Score the marketing page below ` +
+      `from 0 to 100 on how well it serves the goal AND obeys the brand.\n\n` +
+      brandBlock +
+      rubric +
+      `Inspect the actual HTML/CSS — check colors used, copy tone, banned patterns, and ` +
+      `whether brand DON'Ts appear. Do not be generous.\n\n` +
+      `PAGE HTML:\n<<<HTML\n${html}\nHTML\n\n` +
+      jsonInstr;
+
+  // HIGH reasoning is slow; give it 180s. Attach the screenshot when present.
+  const raw = await codexRun(prompt, {
+    effort: "high",
+    timeoutMs: 180_000,
+    images: useImage ? [String(imagePath)] : [],
+  });
   const obj = extractJsonObject(raw);
 
   let score = Number(obj.score);

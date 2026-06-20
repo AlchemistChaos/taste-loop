@@ -26,14 +26,37 @@
 //   wins both honestly (real penalty) and visibly (Codex agrees), and we return
 //   the `violations` so the orchestrator can show exactly WHY.
 //
+// VISION: the base judge grades the RENDERED page, not the HTML source (plan §5).
+// We rasterize the HTML to a PNG with headless Chrome (renderShot) and hand that
+// screenshot to codexJudge, which attaches it via `codex exec -i` and grades the
+// design as a human would see it. The deterministic brand lint still runs on the
+// real HTML so the per-violation penalty stays honest and reproducible.
+//
 // FROZEN IMPORTS (other team members own these files; we code to their signatures):
-//   codexJudge          from ./codex.mjs   — Codex gpt-5.4 HIGH base judge
+//   codexJudge          from ./codex.mjs   — Codex gpt-5.4 HIGH base judge (vision)
 //   brandRuleViolations from ./skills.mjs  — deterministic brand-rule lint
+//   renderShot          from ./render.mjs  — HTML -> PNG via headless Chrome
 //
 // No npm deps. Plain ESM, Node 18+.
 
+import { mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { codexJudge } from "./codex.mjs";
 import { brandRuleViolations } from "./skills.mjs";
+import { renderShot } from "./render.mjs";
+
+// Screenshots live under web/run/shots/ (a sibling of web/run/snapshots/). We
+// resolve it relative to this module so it works regardless of cwd.
+const SHOTS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "run", "shots");
+
+// Build a unique-ish PNG path for one judged page.
+let shotSeq = 0;
+function nextShotPath() {
+  shotSeq += 1;
+  return join(SHOTS_DIR, `shot-${Date.now()}-${process.pid}-${shotSeq}.png`);
+}
 
 // Points deducted per real, checkable brand-rule violation found in the HTML.
 // Env-overridable so the demo can be tuned without code changes.
@@ -103,15 +126,17 @@ function normalizeCodexResult(result) {
 // ---------------------------------------------------------------------------
 
 /**
- * Judge a generated marketing page. Base score + reasoning come from Codex
- * gpt-5.4 HIGH; a deterministic per-violation penalty then makes a page that
- * breaks a real brand rule score honestly lower.
+ * Judge a generated marketing page. The base score + reasoning come from Codex
+ * gpt-5.4 HIGH judging the RENDERED screenshot (vision): we rasterize the HTML to
+ * a PNG with headless Chrome and pass it to codexJudge. A deterministic
+ * per-violation brand lint on the real HTML then makes a page that breaks a real
+ * brand rule score honestly lower.
  *
  * @param {Object}   a
  * @param {Object}   a.brand  BrandSpec from deconstructBrand()
  * @param {string}   a.html   the actual generated page HTML
  * @param {string}   a.goal   the product goal the page is built for
- * @returns {Promise<{score:number, category:string, reasoning:string, violations:string[]}>}
+ * @returns {Promise<{score:number, category:string, reasoning:string, violations:string[], shot:string}>}
  */
 export async function judgeSite({ brand, html, goal }) {
   if (!brand) throw new Error("judgeSite: missing brand");
@@ -131,10 +156,18 @@ export async function judgeSite({ brand, html, goal }) {
     violations = [];
   }
 
-  // --- 2) BASE score + reasoning from Codex gpt-5.4 HIGH ---
-  // codexJudge is the REAL judge model call (no fallback model). If it throws we
-  // surface the error — the directive forbids a cosmetic/qwen judge here.
-  const raw = await codexJudge({ brand, html, goal });
+  // --- 2) RENDER the page to a PNG so the judge grades what is SEEN ---
+  // renderShot throws on failure (no silent fallback); a missing screenshot must
+  // surface, not quietly degrade the judge to a text-only read.
+  await mkdir(SHOTS_DIR, { recursive: true });
+  const shot = nextShotPath();
+  await renderShot(html, shot);
+
+  // --- 3) BASE score + reasoning from Codex gpt-5.4 HIGH (VISION) ---
+  // codexJudge is the REAL judge model call (no fallback model). It grades the
+  // rendered screenshot via `codex exec -i`. If it throws we surface the error —
+  // the directive forbids a cosmetic/qwen judge here.
+  const raw = await codexJudge({ brand, html, goal, imagePath: shot });
   const { score: baseScore, category: codexCategory, reasoning: codexReasoning } =
     normalizeCodexResult(raw);
 
@@ -144,7 +177,7 @@ export async function judgeSite({ brand, html, goal }) {
     );
   }
 
-  // --- 3) Apply the honest per-violation penalty and clamp ---
+  // --- 4) Apply the honest per-violation penalty and clamp ---
   const penalty = violations.length * PENALTY_PER;
   const finalScore = clamp(baseScore - penalty, 0, 100);
 
@@ -165,7 +198,7 @@ export async function judgeSite({ brand, html, goal }) {
   const reasoning = parts.join(" ").trim() ||
     `Codex (gpt-5.4 HIGH) scored ${baseScore}; no brand-rule violations detected.`;
 
-  return { score: finalScore, category, reasoning, violations };
+  return { score: finalScore, category, reasoning, violations, shot };
 }
 
 // ---------------------------------------------------------------------------

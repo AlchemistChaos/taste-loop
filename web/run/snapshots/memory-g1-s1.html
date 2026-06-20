@@ -7,16 +7,16 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;500;600;700;800;900&family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;600;700;800&family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet">
   <script>
     tailwind.config = {
       theme: {
         extend: {
           colors: {
-            primary: '#FE2C55',
-            accent: '#25F4EE',
-            bg: '#000000',
-            text: '#FFFFFF'
+            brandPink: '#FE2C55',
+            brandCyan: '#25F4EE',
+            brandBlack: '#000000',
+            brandWhite: '#FFFFFF'
           },
           fontFamily: {
             sans: ['Sofia Pro', 'League Spartan', 'Roboto', 'Helvetica', 'Arial', 'sans-serif']
@@ -26,184 +26,164 @@
     }
   </script>
   <style>
-    body { font-family: 'Sofia Pro', 'League Spartan', 'Roboto', 'Helvetica', 'Arial', sans-serif; background: #000000; color: #FFFFFF; }
+    body { font-family: 'Sofia Pro', 'League Spartan', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'; }
   </style>
 </head>
-<body class="bg-bg text-text antialiased">
-  <section class="bg-bg border-b-4 border-primary">
-    <div class="mx-auto max-w-7xl px-6 py-16 sm:px-8 sm:py-20 lg:px-12 lg:py-24">
-      <div class="flex flex-col gap-10 lg:flex-row lg:items-end lg:justify-between">
-        <div class="max-w-4xl">
-          <p class="mb-6 inline-block border-2 border-accent px-4 py-2 text-sm font-bold uppercase tracking-[0.2em] text-accent sm:text-base">
-            TikTok for Business
-          </p>
-          <h1 class="max-w-5xl text-5xl font-black uppercase leading-[0.92] sm:text-6xl lg:text-8xl">
-            60-Second Videos × <span class="text-primary">Unlimited Sales</span>
-          </h1>
-          <p class="mt-6 max-w-2xl text-xl font-medium leading-tight sm:text-2xl">
-            Show off your skills, boost your sales — TikTok for Business turns views into conversions.
-          </p>
-          <div class="mt-8 flex flex-col gap-4 sm:flex-row">
-            <a href="#cta" class="inline-flex items-center justify-center bg-primary px-8 py-4 text-lg font-black uppercase tracking-wide text-text">
-              Start Selling on TikTok
-            </a>
-            <a href="#how-it-works" class="inline-flex items-center justify-center border-2 border-text px-8 py-4 text-lg font-black uppercase tracking-wide text-text">
-              See How It Works
-            </a>
-          </div>
+<body class="bg-brandBlack text-brandWhite antialiased">
+  <main>
+    <section class="min-h-screen bg-brandBlack">
+      <div class="mx-auto flex min-h-screen max-w-7xl flex-col justify-between px-6 py-8 lg:px-10">
+        <div class="flex items-center justify-between">
+          <div class="text-lg font-extrabold uppercase tracking-[0.2em]">TikTok for Business</div>
+          <a href="#cta" class="border border-brandWhite px-5 py-3 text-sm font-bold uppercase tracking-[0.15em] transition hover:bg-brandWhite hover:text-brandBlack">Start Now</a>
         </div>
-        <div class="w-full max-w-md border-4 border-text p-6">
-          <div class="grid grid-cols-2 gap-4">
-            <div class="bg-primary p-5">
-              <p class="text-sm font-bold uppercase tracking-[0.15em]">Views</p>
-              <p class="mt-3 text-4xl font-black">Fast</p>
-            </div>
-            <div class="bg-accent p-5 text-bg">
-              <p class="text-sm font-bold uppercase tracking-[0.15em]">Clicks</p>
-              <p class="mt-3 text-4xl font-black">Real</p>
-            </div>
-            <div class="col-span-2 border-2 border-primary p-5">
-              <p class="text-sm font-bold uppercase tracking-[0.15em] text-primary">Why It Hits</p>
-              <p class="mt-3 text-2xl font-black uppercase leading-tight">
-                Native creative. Sharp targeting. Action that lands before the scroll is over.
-              </p>
+
+        <div class="grid items-center gap-12 py-16 lg:grid-cols-2 lg:py-20">
+          <div>
+            <p class="mb-6 inline-block bg-brandPink px-4 py-2 text-sm font-extrabold uppercase tracking-[0.2em] text-brandWhite">60 seconds. Real impact.</p>
+            <h1 class="max-w-4xl text-5xl font-extrabold uppercase leading-[0.92] sm:text-6xl lg:text-8xl">
+              Turn Your Videos Into <span class="text-brandPink">Wins</span>
+            </h1>
+            <p class="mt-6 max-w-2xl text-lg leading-relaxed sm:text-xl">
+              In just 60 seconds, capture attention and grow your business. Make content that stops thumbs, starts conversations, and drives customers straight from the For You Page to your checkout.
+            </p>
+            <div class="mt-10 flex flex-col gap-4 sm:flex-row">
+              <a href="#cta" class="bg-brandPink px-8 py-4 text-center text-sm font-extrabold uppercase tracking-[0.15em] text-brandWhite transition hover:bg-brandWhite hover:text-brandBlack">Create Your First Campaign</a>
+              <a href="#how-it-works" class="border border-brandWhite px-8 py-4 text-center text-sm font-extrabold uppercase tracking-[0.15em] transition hover:bg-brandWhite hover:text-brandBlack">See How It Works</a>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
-  </section>
 
-  <section class="bg-primary text-text">
-    <div class="mx-auto max-w-7xl px-6 py-16 sm:px-8 lg:px-12 lg:py-20">
-      <div class="max-w-4xl">
-        <p class="text-sm font-bold uppercase tracking-[0.2em]">The Problem</p>
-        <h2 class="mt-4 text-4xl font-black uppercase leading-[0.95] sm:text-5xl lg:text-6xl">
-          Boring ads get <span class="text-accent">ignored</span>
-        </h2>
-        <p class="mt-6 max-w-2xl text-xl font-medium leading-tight">
-          People do not open TikTok to be pitched. They open it to feel something, learn something, steal a trick, or find what is next. If your brand looks stiff, it gets swiped away.
-        </p>
-      </div>
-      <div class="mt-10 grid gap-6 md:grid-cols-3">
-        <div class="border-2 border-text bg-bg p-6">
-          <h3 class="text-2xl font-black uppercase">Too Polished</h3>
-          <p class="mt-3 text-lg leading-snug">
-            Traditional ads feel like interruptions. TikTok rewards brands that move like creators.
-          </p>
-        </div>
-        <div class="border-2 border-text bg-bg p-6">
-          <h3 class="text-2xl font-black uppercase">Too Slow</h3>
-          <p class="mt-3 text-lg leading-snug">
-            Waiting weeks to launch means missing the trend, the joke, and the moment buyers care.
-          </p>
-        </div>
-        <div class="border-2 border-text bg-bg p-6">
-          <h3 class="text-2xl font-black uppercase">Too Generic</h3>
-          <p class="mt-3 text-lg leading-snug">
-            Weak hooks and safe copy do not sell. People stop for bold ideas that feel made for the feed.
-          </p>
+          <div class="grid gap-4">
+            <div class="bg-brandPink p-6">
+              <p class="text-sm font-extrabold uppercase tracking-[0.15em]">Fast hook</p>
+              <p class="mt-3 text-3xl font-extrabold uppercase leading-tight">Get seen before they scroll.</p>
+            </div>
+            <div class="bg-brandCyan p-6 text-brandBlack">
+              <p class="text-sm font-extrabold uppercase tracking-[0.15em]">Smart reach</p>
+              <p class="mt-3 text-3xl font-extrabold uppercase leading-tight">Hit the right crowd without sounding like an ad.</p>
+            </div>
+            <div class="border-2 border-brandWhite p-6">
+              <p class="text-sm font-extrabold uppercase tracking-[0.15em]">Real action</p>
+              <p class="mt-3 text-3xl font-extrabold uppercase leading-tight">Turn views into clicks, carts, and repeat buyers.</p>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <section id="how-it-works" class="bg-bg border-y-4 border-accent">
-    <div class="mx-auto max-w-7xl px-6 py-16 sm:px-8 lg:px-12 lg:py-20">
-      <div class="max-w-4xl">
-        <p class="text-sm font-bold uppercase tracking-[0.2em] text-accent">How It Works</p>
-        <h2 class="mt-4 text-4xl font-black uppercase leading-[0.95] sm:text-5xl lg:text-6xl">
-          Make the scroll <span class="text-primary">work</span>
-        </h2>
-        <p class="mt-6 max-w-2xl text-xl font-medium leading-tight">
-          Turn quick video ideas into a full-funnel machine that grabs attention, drives clicks, and closes sales.
-        </p>
-      </div>
-      <div class="mt-12 grid gap-6 lg:grid-cols-3">
-        <div class="border-2 border-primary p-6">
-          <div class="mb-4 inline-flex h-12 w-12 items-center justify-center bg-primary text-2xl font-black">1</div>
-          <h3 class="text-2xl font-black uppercase">Hook Fast</h3>
-          <p class="mt-3 text-lg leading-snug">
-            Lead with a sharp visual, a loud opinion, or a product moment people instantly get.
-          </p>
-        </div>
-        <div class="border-2 border-primary p-6">
-          <div class="mb-4 inline-flex h-12 w-12 items-center justify-center bg-primary text-2xl font-black">2</div>
-          <h3 class="text-2xl font-black uppercase">Target Smart</h3>
-          <p class="mt-3 text-lg leading-snug">
-            Reach the communities already obsessed with your category, style, and offer.
-          </p>
-        </div>
-        <div class="border-2 border-primary p-6">
-          <div class="mb-4 inline-flex h-12 w-12 items-center justify-center bg-primary text-2xl font-black">3</div>
-          <h3 class="text-2xl font-black uppercase">Convert Hard</h3>
-          <p class="mt-3 text-lg leading-snug">
-            Send high-intent viewers straight to product pages, lead forms, storefronts, or checkout.
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="bg-accent text-bg">
-    <div class="mx-auto max-w-7xl px-6 py-16 sm:px-8 lg:px-12 lg:py-20">
-      <div class="max-w-4xl">
-        <p class="text-sm font-bold uppercase tracking-[0.2em]">Proof</p>
-        <h2 class="mt-4 text-4xl font-black uppercase leading-[0.95] sm:text-5xl lg:text-6xl">
-          Views are cute. <span class="text-primary">Sales</span> are better.
-        </h2>
-        <p class="mt-6 max-w-2xl text-xl font-bold leading-tight">
-          TikTok is where discovery happens fast. When creative and commerce click, brands move from maybe later to sold out.
-        </p>
-      </div>
-      <div class="mt-10 grid gap-6 md:grid-cols-3">
-        <div class="border-2 border-bg bg-text p-6">
-          <p class="text-sm font-bold uppercase tracking-[0.15em]">Creator Energy</p>
-          <p class="mt-4 text-5xl font-black">Native</p>
-          <p class="mt-3 text-lg leading-snug">
-            Content that feels built for the feed earns attention without begging for it.
-          </p>
-        </div>
-        <div class="border-2 border-bg bg-text p-6">
-          <p class="text-sm font-bold uppercase tracking-[0.15em]">Business Impact</p>
-          <p class="mt-4 text-5xl font-black">Direct</p>
-          <p class="mt-3 text-lg leading-snug">
-            Product discovery, site traffic, and checkout action happen in one clean motion.
-          </p>
-        </div>
-        <div class="border-2 border-bg bg-text p-6">
-          <p class="text-sm font-bold uppercase tracking-[0.15em]">Creative Speed</p>
-          <p class="mt-4 text-5xl font-black">Daily</p>
-          <p class="mt-3 text-lg leading-snug">
-            Test hooks, remix winners, and keep momentum while everyone else is still in review.
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section id="cta" class="bg-bg">
-    <div class="mx-auto max-w-7xl px-6 py-16 sm:px-8 lg:px-12 lg:py-24">
-      <div class="border-4 border-primary p-8 sm:p-10 lg:p-14">
+    <section class="bg-brandPink text-brandWhite">
+      <div class="mx-auto max-w-7xl px-6 py-20 lg:px-10">
         <div class="max-w-4xl">
-          <p class="text-sm font-bold uppercase tracking-[0.2em] text-primary">Ready?</p>
-          <h2 class="mt-4 text-4xl font-black uppercase leading-[0.95] sm:text-5xl lg:text-7xl">
-            Turn attention into <span class="text-accent">action</span>
+          <p class="text-sm font-extrabold uppercase tracking-[0.2em]">The problem</p>
+          <h2 class="mt-4 text-4xl font-extrabold uppercase leading-[0.95] sm:text-5xl lg:text-6xl">
+            Posting more doesn’t mean getting <span class="text-brandBlack">customers</span>
           </h2>
-          <p class="mt-6 max-w-2xl text-xl font-medium leading-tight">
-            If your brand can make a point in 60 seconds, it can make a customer today. Launch sharper creative, hit the right audience, and sell like you mean it.
+          <p class="mt-6 max-w-2xl text-lg leading-relaxed sm:text-xl">
+            Most brands make videos that look polished and feel invisible. They talk too much, hook too late, and blend in. On TikTok, attention is earned fast or lost faster.
           </p>
-          <div class="mt-8 flex flex-col gap-4 sm:flex-row">
-            <a href="#" class="inline-flex items-center justify-center bg-primary px-8 py-4 text-lg font-black uppercase tracking-wide text-text">
-              Get Started
-            </a>
-            <a href="#" class="inline-flex items-center justify-center border-2 border-accent px-8 py-4 text-lg font-black uppercase tracking-wide text-accent">
-              Talk to Sales
-            </a>
+        </div>
+
+        <div class="mt-12 grid gap-6 md:grid-cols-3">
+          <div class="border-2 border-brandWhite p-6">
+            <div class="text-4xl font-extrabold">01</div>
+            <p class="mt-4 text-2xl font-extrabold uppercase">Weak openings</p>
+            <p class="mt-3 text-base leading-relaxed">If the first seconds don’t punch, nobody sticks around for the pitch.</p>
+          </div>
+          <div class="border-2 border-brandWhite p-6">
+            <div class="text-4xl font-extrabold">02</div>
+            <p class="mt-4 text-2xl font-extrabold uppercase">Safe creative</p>
+            <p class="mt-3 text-base leading-relaxed">The feed rewards ideas with personality, not ads that play it careful.</p>
+          </div>
+          <div class="border-2 border-brandWhite p-6">
+            <div class="text-4xl font-extrabold">03</div>
+            <p class="mt-4 text-2xl font-extrabold uppercase">No clear next step</p>
+            <p class="mt-3 text-base leading-relaxed">Views feel good. Sales feel better. Your content needs to push both.</p>
           </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
+
+    <section id="how-it-works" class="bg-brandBlack text-brandWhite">
+      <div class="mx-auto max-w-7xl px-6 py-20 lg:px-10">
+        <div class="max-w-4xl">
+          <p class="text-sm font-extrabold uppercase tracking-[0.2em]">How it works</p>
+          <h2 class="mt-4 text-4xl font-extrabold uppercase leading-[0.95] sm:text-5xl lg:text-6xl">
+            Make short videos that drive <span class="text-brandCyan">big action</span>
+          </h2>
+          <p class="mt-6 max-w-2xl text-lg leading-relaxed sm:text-xl">
+            Build momentum with a simple rhythm: grab attention, show the value, tell them what to do next. No fluff. No dragged-out message. Just content that moves.
+          </p>
+        </div>
+
+        <div class="mt-12 grid gap-6 lg:grid-cols-3">
+          <div class="bg-brandCyan p-8 text-brandBlack">
+            <p class="text-sm font-extrabold uppercase tracking-[0.15em]">Step 1</p>
+            <h3 class="mt-4 text-3xl font-extrabold uppercase leading-tight">Hook hard</h3>
+            <p class="mt-4 text-base leading-relaxed">Start with a bold visual, sharp line, or fast payoff. Make them curious immediately.</p>
+          </div>
+          <div class="border-2 border-brandWhite p-8">
+            <p class="text-sm font-extrabold uppercase tracking-[0.15em]">Step 2</p>
+            <h3 class="mt-4 text-3xl font-extrabold uppercase leading-tight">Show the win</h3>
+            <p class="mt-4 text-base leading-relaxed">Demo the product, reveal the result, or let a creator tell the story in a way that feels native.</p>
+          </div>
+          <div class="bg-brandPink p-8">
+            <p class="text-sm font-extrabold uppercase tracking-[0.15em]">Step 3</p>
+            <h3 class="mt-4 text-3xl font-extrabold uppercase leading-tight">Drive the click</h3>
+            <p class="mt-4 text-base leading-relaxed">Close with one clear move: shop now, learn more, book today, or join the drop.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="bg-brandCyan text-brandBlack">
+      <div class="mx-auto max-w-7xl px-6 py-20 lg:px-10">
+        <div class="max-w-4xl">
+          <p class="text-sm font-extrabold uppercase tracking-[0.2em]">Proof</p>
+          <h2 class="mt-4 text-4xl font-extrabold uppercase leading-[0.95] sm:text-5xl lg:text-6xl">
+            When the creative hits, the <span class="text-brandPink">numbers</span> move
+          </h2>
+          <p class="mt-6 max-w-2xl text-lg leading-relaxed sm:text-xl">
+            TikTok is where discovery happens fast. The brands that win show up with confidence, move like creators, and make every second count.
+          </p>
+        </div>
+
+        <div class="mt-12 grid gap-6 md:grid-cols-3">
+          <div class="border-2 border-brandBlack p-8">
+            <div class="text-5xl font-extrabold">60s</div>
+            <p class="mt-4 text-2xl font-extrabold uppercase">To hook attention</p>
+            <p class="mt-3 text-base leading-relaxed">Short-form gives you just enough time to land the idea and spark the action.</p>
+          </div>
+          <div class="border-2 border-brandBlack p-8">
+            <div class="text-5xl font-extrabold">1 idea</div>
+            <p class="mt-4 text-2xl font-extrabold uppercase">Per video</p>
+            <p class="mt-3 text-base leading-relaxed">Keep the message tight and the payoff obvious. Simple beats crowded every time.</p>
+          </div>
+          <div class="border-2 border-brandBlack p-8">
+            <div class="text-5xl font-extrabold">Real growth</div>
+            <p class="mt-4 text-2xl font-extrabold uppercase">From real culture</p>
+            <p class="mt-3 text-base leading-relaxed">The strongest campaigns feel like TikTok first and marketing second.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="cta" class="bg-brandBlack text-brandWhite">
+      <div class="mx-auto max-w-7xl px-6 py-20 lg:px-10">
+        <div class="border-2 border-brandPink p-8 sm:p-12 lg:p-16">
+          <p class="text-sm font-extrabold uppercase tracking-[0.2em] text-brandPink">Call to action</p>
+          <h2 class="mt-4 max-w-4xl text-4xl font-extrabold uppercase leading-[0.95] sm:text-5xl lg:text-7xl">
+            Stop making content that gets watched. Make content that gets <span class="text-brandPink">bought</span>
+          </h2>
+          <p class="mt-6 max-w-2xl text-lg leading-relaxed sm:text-xl">
+            Bring your brand to TikTok with creative that feels alive, moves fast, and turns scrolls into customers.
+          </p>
+          <div class="mt-10 flex flex-col gap-4 sm:flex-row">
+            <a href="#" class="bg-brandPink px-8 py-4 text-center text-sm font-extrabold uppercase tracking-[0.15em] text-brandWhite transition hover:bg-brandWhite hover:text-brandBlack">Launch Your Campaign</a>
+            <a href="#" class="border border-brandWhite px-8 py-4 text-center text-sm font-extrabold uppercase tracking-[0.15em] transition hover:bg-brandWhite hover:text-brandBlack">Talk to Sales</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
 </body>
 </html>

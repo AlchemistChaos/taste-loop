@@ -21,6 +21,11 @@ const OUT = join(RUN_DIR, "events.json");
 const GENS = Math.max(1, parseInt(process.env.GENS || "2", 10));
 const MEM_KIND = process.env.MEM || "shim";
 
+// --ablate-memory (or ABLATE=1): on the MEMORY page, recall lessons as usual but
+// STRIP them from the agents' briefs + the build — the counterfactual that shows
+// "memory removed = the win disappears".
+const ABLATE = process.argv.includes("--ablate-memory") || process.env.ABLATE === "1";
+
 const events = [];
 const t0 = Date.now();
 let dirty = false;
@@ -47,9 +52,13 @@ function makeEmitter(page) {
 const GOAL_STR = process.env.GOAL || GOAL;
 
 async function main() {
-  console.log(`TasteLoop LIVE run — gens=${GENS} memory=${MEM_KIND}`);
+  console.log(`TasteLoop LIVE run — gens=${GENS} memory=${MEM_KIND}${ABLATE ? " ablate=ON" : ""}`);
   console.log(`Goal: ${GOAL_STR}`);
+  if (ABLATE) console.log("ABLATION: memory page recalls lessons but STRIPS them from briefs + build (counterfactual).");
   await mkdir(SNAP_DIR, { recursive: true });
+  // skills.runHtmlBuild writes snapshots to TASTELOOP_SNAP_DIR — point it at the
+  // live web/run/snapshots so htmlRefs (relative to web/run) resolve in the UI.
+  process.env.TASTELOOP_SNAP_DIR = SNAP_DIR;
   // Start from an empty log so the UI resets to a clean state immediately.
   await writeFile(OUT, JSON.stringify({ runId: "demo", turnBudget: 20, live: true, events: [] }, null, 2), "utf8");
 
@@ -63,7 +72,7 @@ async function main() {
   // building side by side in real time.
   await Promise.all([
     runPage({ page: "no-memory", gens: GENS, memory: makeMemory("none"), brand, emit: makeEmitter("no-memory"), snapDir: SNAP_DIR, goal: GOAL_STR }),
-    runPage({ page: "memory", gens: GENS, memory: makeMemory(MEM_KIND), brand, emit: makeEmitter("memory"), snapDir: SNAP_DIR, goal: GOAL_STR }),
+    runPage({ page: "memory", gens: GENS, memory: makeMemory(MEM_KIND), brand, emit: makeEmitter("memory"), snapDir: SNAP_DIR, goal: GOAL_STR, ablate: ABLATE }),
   ]);
 
   clearInterval(flusher);

@@ -5,7 +5,12 @@
 ## MVP goal
 Two studios side-by-side build a TikTok site from `TikTok_guidelines.pdf`. **Page 2 (memory) learns & scores higher; Page 1 (no memory) doesn't.** Web UI replays an event log with live counters (Agents · Turns x/20 · Traces · Improvements · Lessons) + a live `<iframe>` of each site.
 
-## Status — TIER 2.5 v2 IN PROGRESS (workflow wxhw5wrj9, 7 agents)
+## Status — TIER 2.5 PROVEN ✅ (memory WINS 64 vs 54, honest)
+2.5 test run: **memory 64 vs no-memory 54**. 27 agents ALL with master-authored prompts+skills (master invented an 8-role team incl. `brand-guardian`). Codex-gpt-5.4-HIGH judge gave real reasoning, caught a real font violation. Model locked = **gpt-5.4 medium everywhere** (Spark 5.3 / -codex variants rejected on ChatGPT auth).
+⚠️ Weak spot: distilled lessons low-quality ("Got it."/fluff) — Cognee local-distill needs work (fix in 2.7).
+In flight: design-system extraction (rich tokens/css from PDF) · Tier 2.6 (vision judge, image-gen, prompt-diff wow, lesson→skill). Queued 2.7: wire stylesheet into agents, judge→medium, progressive render + batch-cognee, fix lesson quality.
+
+## (history) Tier 2.5 v2 build (workflow wxhw5wrj9, 7 agents)
 **Tier 2 ✅ verified real but thesis FAILED honestly:** real Codex builds (gpt-5.4) + real Cognee (no fallbacks), BUT memory **lost 55 vs 75** — because (a) qwen judge = noise, (b) Codex never makes the gradient mistake so the win-lever never fired.
 **Tier 2.5 v2 fixes both (7 agents):** master authors the full team (count + per-agent prompts + skills) · every agent does real work · **judge = Codex gpt-5.4 HIGH** (no qwen) · honest brand-rule lever (memory recalls a real rule Codex misses → no-memory violates → deterministic penalty → memory wins on merit) · UI shows each agent's prompt+skills. Verify runs end-to-end (~15 min: Codex builds + Codex-high judge are slow).
 

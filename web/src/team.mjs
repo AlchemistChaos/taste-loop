@@ -60,6 +60,12 @@ export const SKILL_PALETTE = [
   "cognee_recall",  // recall prior-run lessons / in-run traces from memory
   "cognee_trace",   // write findings back into memory as traces
   "brand_tokens",   // read the BrandSpec tokens (colors/fonts/dos/donts)
+  // Real, grantable capabilities the executor will ACTUALLY run. A recalled
+  // lesson that implies one of these MUST cause the master to grant it.
+  "image_gen",      // generate an on-brand hero image (returns a data URI to embed)
+  "a11y_check",     // run a real accessibility check on the built page
+  "contrast_check", // parse colors and flag low-contrast text/bg pairs
+  "copy_lint",      // flag banned business buzzwords in the copy
 ];
 
 const SKILL_SET = new Set(SKILL_PALETTE);
@@ -101,6 +107,15 @@ function masterSystemPrompt({ isMemory }) {
     "  - cognee_recall: recall lessons learned in prior runs and traces within this run.",
     "  - cognee_trace: write findings/decisions back into memory.",
     "  - brand_tokens: read the BrandSpec tokens (exact colors, fonts, dos/donts).",
+    "  - image_gen: generate an on-brand hero IMAGE (a data URI the builder embeds). Grant when a lesson or the brief calls for stronger/on-brand imagery.",
+    "  - a11y_check: run a REAL accessibility check on the built page (alt text, button/aria, lang). Grant to the auditor/builder when a lesson concerns accessibility.",
+    "  - contrast_check: parse colors and flag low-contrast text/bg pairs. Grant when a lesson concerns contrast, legibility, or accent-on-CTA.",
+    "  - copy_lint: flag banned business buzzwords/jargon in the copy. Grant when a lesson concerns voice/jargon/buzzwords.",
+    "",
+    "TOOLS ARE REAL CAPABILITIES, NOT LABELS. When a recalled lesson implies a capability, GRANT that agent the",
+    "matching tool from the palette, not just mention it in prose. Examples: a contrast/accessibility lesson ->",
+    "GRANT a11y_check and/or contrast_check to the auditor; an imagery/visual lesson -> GRANT image_gen to the",
+    "builder or image-sourcer; a voice/jargon/buzzword lesson -> GRANT copy_lint to the copywriter or critique.",
     "",
     "HARD REQUIREMENTS for the roster you return:",
     '  1. EXACTLY ONE agent must have produces == "html" and be granted the "html_build" tool. This is the',
@@ -246,6 +261,57 @@ function weaveLessons(instructions, lessons) {
   return `${asString(instructions)}${tail}`;
 }
 
+// ---------------------------------------------------------------------------
+// Lesson -> SKILL GRANT mapping. A recalled lesson must change an agent's
+// TOOLSET, not only its prompt. Each rule matches lesson text and yields the
+// real capability to grant + the roles that should receive it (in preference
+// order). This is the deterministic backbone behind the master prompt's
+// "GRANT the matching tool" instruction.
+// ---------------------------------------------------------------------------
+const LESSON_SKILL_RULES = [
+  {
+    skill: "contrast_check",
+    test: /contrast|legib|low[-\s]?contrast|accent.*(cta|button|link)|(cta|button|link).*accent|#25f4ee|readab/i,
+    roles: ["critique", "brand-guardian", "visual-designer", "frontend-implementer"],
+  },
+  {
+    skill: "a11y_check",
+    test: /a11y|accessib|alt text|aria|screen reader|wcag|focus state|tab order/i,
+    roles: ["critique", "brand-guardian", "frontend-implementer"],
+  },
+  {
+    skill: "copy_lint",
+    test: /buzzword|jargon|business[-\s]?speak|voice|revolutionary|cutting[-\s]?edge|game[-\s]?chang|synergy|leverage/i,
+    roles: ["copywriter", "critique", "brand-guardian"],
+  },
+  {
+    skill: "image_gen",
+    test: /imager|image|hero (visual|image|shot)|photo|illustration|stock|visual.*(weak|generic|off[-\s]?brand)/i,
+    roles: ["image-sourcer", "frontend-implementer", "visual-designer"],
+  },
+];
+
+// Given the recalled lessons, return [{skill, roles}] for every capability they
+// imply. De-duped by skill (first matching lesson wins the role preference).
+function lessonSkillGrants(lessons) {
+  if (!Array.isArray(lessons) || !lessons.length) return [];
+  const texts = lessons
+    .map((l) => (typeof l === "string" ? l : (l && l.statement) || ""))
+    .filter(Boolean);
+  const grants = [];
+  const seen = new Set();
+  for (const text of texts) {
+    for (const rule of LESSON_SKILL_RULES) {
+      if (seen.has(rule.skill)) continue;
+      if (rule.test.test(text)) {
+        grants.push({ skill: rule.skill, roles: rule.roles });
+        seen.add(rule.skill);
+      }
+    }
+  }
+  return grants;
+}
+
 // Roles whose briefs should carry the recalled lessons on the memory studio.
 const LESSON_BEARING_ROLES = new Set([
   "frontend-implementer",
@@ -358,6 +424,27 @@ function repairTeam(raw, ctx) {
       }
     } else {
       a.tools = a.tools.filter((t) => !MEMORY_TOOLS.has(t));
+    }
+  }
+
+  // 5b) MEMORY studio: a recalled lesson must change an agent's TOOLSET, not only
+  //     its prompt. For every capability the lessons imply, GRANT the matching
+  //     skill to the best available agent (preferred role order). If none of the
+  //     preferred roles is on the roster, attach it to the critique/builder so
+  //     the capability is never silently dropped.
+  if (isMemory && lessons && lessons.length) {
+    for (const { skill, roles } of lessonSkillGrants(lessons)) {
+      // already granted to someone? skip.
+      if (cleaned.some((a) => a.tools.includes(skill))) continue;
+      let target = null;
+      for (const role of roles) {
+        target = cleaned.find((a) => a.role === role);
+        if (target) break;
+      }
+      // image_gen falls to the html builder (it threads the data URI to embed);
+      // all other checks fall to the critique auditor.
+      if (!target) target = (skill === "image_gen") ? htmlAgent : critAgent;
+      if (target && !target.tools.includes(skill)) target.tools.push(skill);
     }
   }
 
@@ -502,6 +589,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
           LESSON_BEARING_ROLES.has(a.role) &&
           /gradient/i.test(a.instructions));
         log(woven, `${tag} recalled lessons woven into a brief`);
+
+        // a recalled lesson must change an agent's TOOLSET, not only its prompt:
+        // the accent/CTA contrast lesson -> the auditor gets contrast_check.
+        const granted = team.agents.find((a) => a.tools.includes("contrast_check"));
+        log(!!granted, `${tag} accent/CTA contrast lesson GRANTED contrast_check to an agent`);
+        if (granted) console.log(`    -> contrast_check granted to [${granted.id}] role=${granted.role}`);
       } else {
         // no memory tools may leak
         log(team.agents.every((a) => !a.tools.includes("cognee_recall") && !a.tools.includes("cognee_trace")),

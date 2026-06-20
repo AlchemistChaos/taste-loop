@@ -35,6 +35,18 @@ import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// image.mjs is built in parallel; code to its frozen shape:
+//   generateImage({ prompt, brand }) -> { path, dataUri }
+// We import lazily inside the skill so this module still loads/smoke-tests even
+// if image.mjs hasn't landed yet (the smoke test stubs generateImage via deps).
+let _generateImage = null;
+async function loadGenerateImage() {
+  if (_generateImage) return _generateImage;
+  const mod = await import("./image.mjs");
+  _generateImage = mod.generateImage || mod.default;
+  return _generateImage;
+}
+
 // web/run/snapshots — htmlRef is returned RELATIVE to web/run (per the contract).
 // SNAP_DIR is env-overridable so tests can isolate to a temp dir and never
 // clobber the live run snapshots.
@@ -61,6 +73,11 @@ export const TOOL_PALETTE = Object.freeze({
   info_architect:"Order/define the page's sections for conversion.",
   typographer:   "Tune the type scale and font usage to the brand.",
   critique:      "Audit a page against the brand rules and list concrete findings.",
+  // Real, grantable capabilities — each EXECUTES against the brand/imagery/HTML.
+  image_gen:     "Generate an on-brand hero image (returns a data URI to embed).",
+  a11y_check:    "Run a real accessibility check on the HTML (alt text, button/aria).",
+  contrast_check:"Parse colors in the HTML and flag low-contrast text/bg pairs.",
+  copy_lint:     "Scan copy/HTML for banned business buzzwords (brand voice).",
 });
 
 // Banned marketing buzzwords. The TikTok brand voice is "smart and direct" and
@@ -200,10 +217,28 @@ export async function runAgent({ agent, gen, page, ctx = {}, deps, emit }) {
     result = await runRecall({ agent, agentId, page, ctx, deps, emit: e });
   }
 
+  // --- image generation (read; threads a data URI for the builder to embed) -
+  //     Runs BEFORE html_build so a builder that also holds image_gen embeds the
+  //     image it just produced. The image is threaded onto ctx.heroImage.
+  if (has("image_gen")) {
+    const img = await runImageGen({ agent, agentId, page, ctx, deps, emit: e });
+    result = { ...(result || {}), ...img };
+  }
+
   // --- html build (the page) ----------------------------------------------
   if (has("html_build")) {
     const built = await runHtmlBuild({ agent, agentId, gen, page, ctx, deps, emit: e });
     result = { ...(result || {}), ...built };
+  }
+
+  // --- real quality checks on produced/ctx HTML (audit skills) ------------
+  //     These EXECUTE the granted check against whatever HTML is available
+  //     (the agent's own build if it just built, else the threaded ctx.html).
+  //     Each folds concrete issues into result.findings + ctx.findings and
+  //     re-emits agent.status naming the skill it actually ran.
+  if (has("a11y_check") || has("contrast_check") || has("copy_lint")) {
+    const audit = runChecks({ agent, agentId, tools, ctx, deps, emit: e, result });
+    result = { ...(result || {}), ...audit };
   }
 
   // --- svg image -----------------------------------------------------------
@@ -248,8 +283,12 @@ export async function runAgent({ agent, gen, page, ctx = {}, deps, emit }) {
 // ---- status line per role -------------------------------------------------
 function statusFor(role, tools, ctx) {
   if (tools.includes("cognee_recall")) return "recalling prior lessons & traces from memory";
+  if (tools.includes("image_gen")) return "generating an on-brand hero image to embed";
   if (tools.includes("html_build")) return "building full HTML page with Codex (gpt-5.4)";
   if (tools.includes("svg_image")) return "generating an inline on-brand SVG with Codex";
+  if (tools.includes("contrast_check")) return "checking color contrast on the built page";
+  if (tools.includes("a11y_check")) return "running an accessibility check on the built page";
+  if (tools.includes("copy_lint")) return "linting copy for banned business buzzwords";
   if (tools.includes("cognee_trace")) return "writing findings to memory";
   switch (role) {
     case "copywriter": return "writing bold 5-section TikTok copy direction";
@@ -299,10 +338,17 @@ async function runHtmlBuild({ agent, agentId, gen, page, ctx, deps, emit }) {
 
   // Fold the agent's own master-authored instructions into the copy hint so the
   // build reflects what THIS agent was told to do (not a generic template).
-  const copyHint = [ctx?.copyHint, agent.instructions]
+  let copyHint = [ctx?.copyHint, agent.instructions]
     .filter(Boolean)
     .join(". ")
     .slice(0, 600);
+
+  // If an image_gen agent threaded a hero image onto ctx, instruct the builder to
+  // embed it as the literal hero <img src="..."> so the produced page actually
+  // uses it. Append AFTER the truncation so the (long) data URI isn't clipped.
+  if (ctx?.heroImage) {
+    copyHint += `. Embed this exact on-brand hero image as the hero visual via <img alt="TikTok for Business hero" src="${ctx.heroImage}">`;
+  }
 
   const html = await codexBuildSite({ brand, goal, copyHint, lesson: lessonText });
 
@@ -335,6 +381,249 @@ async function runSvgImage({ agent, deps, ctx }) {
   const svg = extractSvg(raw);
   if (!svg) throw new Error("svg_image: Codex returned no <svg> element");
   return svg;
+}
+
+// ---- tool: image_gen (REAL on-brand image; threads a data URI to embed) ----
+// Calls generateImage({prompt,brand}) from ./image.mjs (frozen {path,dataUri}).
+// The data URI is threaded onto ctx.heroImage so the html_build agent embeds it,
+// and returned as result.output. A test may inject deps.generateImage to stub.
+async function runImageGen({ agent, agentId, page, ctx, deps, emit }) {
+  const { brand } = deps;
+  const c = brand?.colors || {};
+  const prompt = [
+    groundedPrompt(agent, deps, ctx),
+    "",
+    `Generate ONE on-brand hero image: flat, bold, ${Array.isArray(brand?.tone) ? brand.tone.join("/") : brand?.tone}.`,
+    `Use only the brand palette (primary ${c.primary}, accent ${c.accent} on ${c.bg}). NO gradients, no off-palette colors, no generic AI stock.`,
+  ].join("\n");
+
+  // Prefer an injected generateImage (tests/orchestrator), else load image.mjs.
+  // image.mjs is built in parallel; if it isn't present yet, degrade gracefully
+  // (the agent still completes, just without an embedded image) rather than crash.
+  let img = null;
+  try {
+    const gen = typeof deps?.generateImage === "function"
+      ? deps.generateImage
+      : await loadGenerateImage();
+    img = await gen({ prompt, brand });
+  } catch {
+    img = null;
+  }
+
+  const dataUri = img && typeof img.dataUri === "string" ? img.dataUri : "";
+  const imgPath = img && typeof img.path === "string" ? img.path : "";
+
+  // Thread the data URI forward so the builder embeds the produced image.
+  if (dataUri && ctx && typeof ctx === "object") ctx.heroImage = dataUri;
+
+  emit({ type: "agent.status", agentId, doing: dataUri ? "generated an on-brand hero image" : "image generation produced no image" });
+
+  return {
+    role: agent.role,
+    produces: "image",
+    output: { dataUri, path: imgPath },
+    heroImage: dataUri || undefined,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// REAL QUALITY-CHECK SKILLS (a11y_check / contrast_check / copy_lint)
+// Each is a deterministic check on an actual HTML artifact (no model call).
+// The orchestrator/builder threads ctx.html; an agent that also built the page
+// audits its own fresh output. Issues fold into result.findings + ctx.findings
+// and the agent re-emits agent.status naming the skill it ran.
+// ---------------------------------------------------------------------------
+
+function runChecks({ agent, agentId, tools, ctx, deps, emit, result }) {
+  const has = (t) => tools.includes(t);
+  // The HTML this agent audits: prefer what it just produced, else ctx.html.
+  const html =
+    (result && (result.html || (typeof result.output === "string" ? result.output : ""))) ||
+    ctx?.html ||
+    "";
+
+  const findings = [];
+  const checks = [];
+
+  if (has("a11y_check")) {
+    const issues = a11yCheck(html);
+    findings.push(...issues);
+    checks.push("a11y_check");
+    emit({ type: "agent.status", agentId, doing: `a11y_check: ${issues.length} issue(s)` });
+  }
+  if (has("contrast_check")) {
+    const issues = contrastCheck(html, deps?.brand);
+    findings.push(...issues);
+    checks.push("contrast_check");
+    emit({ type: "agent.status", agentId, doing: `contrast_check: ${issues.length} issue(s)` });
+  }
+  if (has("copy_lint")) {
+    const issues = copyLint(html);
+    findings.push(...issues);
+    checks.push("copy_lint");
+    emit({ type: "agent.status", agentId, doing: `copy_lint: ${issues.length} issue(s)` });
+  }
+
+  // Fold issues into the shared run context so the builder/critique sees them.
+  if (findings.length && ctx && typeof ctx === "object") {
+    ctx.findings = [...(ctx.findings || []), ...findings];
+  }
+
+  // Merge with any prior findings on this agent's result (e.g. a critique that
+  // also holds a check) so nothing is dropped.
+  const priorFindings = (result && Array.isArray(result.findings)) ? result.findings : [];
+  return {
+    role: agent.role,
+    produces: result && result.produces && result.produces !== "text" ? result.produces : "audit",
+    output: { checks, issues: findings },
+    findings: [...priorFindings, ...findings],
+  };
+}
+
+// --- a11y_check: real, checkable accessibility issues in the HTML -----------
+export function a11yCheck(html) {
+  const out = [];
+  const h = String(html || "");
+  if (!h.trim()) return out;
+
+  // 1) <img> without a non-empty alt attribute.
+  const imgs = h.match(/<img\b[^>]*>/gi) || [];
+  let imgMissingAlt = 0;
+  for (const tag of imgs) {
+    const m = tag.match(/\balt\s*=\s*("([^"]*)"|'([^']*)'|[^\s>]+)/i);
+    const alt = m ? (m[2] ?? m[3] ?? m[1] ?? "").trim() : "";
+    if (!m || !alt) imgMissingAlt++;
+  }
+  if (imgMissingAlt > 0) {
+    out.push(`a11y: ${imgMissingAlt} <img> element(s) missing meaningful alt text.`);
+  }
+
+  // 2) Icon-only / empty buttons & links without an accessible name.
+  const interactive = h.match(/<(button|a)\b[^>]*>([\s\S]*?)<\/\1>/gi) || [];
+  let unnamed = 0;
+  for (const el of interactive) {
+    const open = el.match(/<(button|a)\b[^>]*>/i)?.[0] || "";
+    const inner = el.replace(/<(button|a)\b[^>]*>/i, "").replace(/<\/(button|a)>$/i, "");
+    const text = inner.replace(/<[^>]*>/g, "").replace(/&[a-z]+;/gi, " ").trim();
+    const hasAria = /\baria-label\s*=\s*("[^"]+"|'[^']+'|[^\s>]+)/i.test(open) ||
+                    /\baria-labelledby\s*=/i.test(open) ||
+                    /\btitle\s*=\s*("[^"]+"|'[^']+')/i.test(open);
+    // an anchor that is purely a wrapper around an <img> with alt is OK
+    const wrapsAltImg = /<img\b[^>]*\balt\s*=\s*("[^"]+"|'[^']+')/i.test(inner);
+    if (!text && !hasAria && !wrapsAltImg) unnamed++;
+  }
+  if (unnamed > 0) {
+    out.push(`a11y: ${unnamed} button/link(s) have no accessible name (need text or aria-label).`);
+  }
+
+  // 3) Document language not declared.
+  if (/<html\b/i.test(h) && !/<html\b[^>]*\blang\s*=/i.test(h)) {
+    out.push("a11y: <html> is missing a lang attribute.");
+  }
+
+  return out;
+}
+
+// --- contrast_check: parse inline colors, flag low-contrast text/bg pairs ---
+export function contrastCheck(html, brand) {
+  const out = [];
+  const h = String(html || "");
+  if (!h.trim()) return out;
+
+  // Pull inline style="..." blocks and look for color + background pairs.
+  const styles = h.match(/style\s*=\s*("([^"]*)"|'([^']*)')/gi) || [];
+  let flagged = 0;
+  for (const s of styles) {
+    const body = (s.match(/style\s*=\s*("([^"]*)"|'([^']*)')/i) || [])[2] ??
+                 (s.match(/style\s*=\s*'([^']*)'/i) || [])[1] ?? "";
+    const color = parseColor(getDecl(body, "color"));
+    const bg = parseColor(getDecl(body, "background-color")) || parseColor(getDecl(body, "background"));
+    if (color && bg) {
+      const ratio = contrastRatio(color, bg);
+      if (ratio < 4.5) {
+        flagged++;
+        out.push(`contrast: text/bg pair ${hex(color)} on ${hex(bg)} ratio ${ratio.toFixed(2)} is below WCAG AA (4.5:1).`);
+      }
+    }
+  }
+
+  // Brand-specific: accent cyan on white/light is a known low-contrast trap.
+  const accent = parseColor(brand?.colors?.accent || "#25F4EE");
+  if (accent && flagged === 0) {
+    // only a hint, not a hard finding, if the accent text sits on a light bg literal
+    const bg = parseColor(brand?.colors?.bg || "#000000");
+    if (bg) {
+      const ratio = contrastRatio(accent, bg);
+      if (ratio < 3) {
+        out.push(`contrast: brand accent ${hex(accent)} on bg ${hex(bg)} is only ${ratio.toFixed(2)}:1 — avoid accent text on that background.`);
+      }
+    }
+  }
+
+  return out;
+}
+
+// --- copy_lint: flag banned business buzzwords in copy/HTML -----------------
+export function copyLint(html) {
+  const out = [];
+  const lower = String(html || "").toLowerCase();
+  if (!lower.trim()) return out;
+  for (const word of BANNED_BUZZWORDS) {
+    const re = new RegExp(`(^|[^a-z])${escapeRegExp(word.toLowerCase())}([^a-z]|$)`, "i");
+    if (re.test(lower)) {
+      out.push(`copy_lint: banned buzzword "${word}" — brand voice avoids business jargon.`);
+    }
+  }
+  return out;
+}
+
+// ---- color helpers for contrast_check (WCAG relative luminance) ------------
+function getDecl(styleBody, prop) {
+  const re = new RegExp(`(?:^|;)\\s*${prop}\\s*:\\s*([^;]+)`, "i");
+  const m = String(styleBody || "").match(re);
+  return m ? m[1].trim() : "";
+}
+
+function parseColor(v) {
+  if (!v) return null;
+  const s = String(v).trim();
+  let m = s.match(/#([0-9a-f]{6})\b/i);
+  if (m) {
+    const n = parseInt(m[1], 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  m = s.match(/#([0-9a-f]{3})\b/i);
+  if (m) {
+    const [a, b, c] = m[1].split("");
+    return { r: parseInt(a + a, 16), g: parseInt(b + b, 16), b: parseInt(c + c, 16) };
+  }
+  m = s.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (m) return { r: +m[1], g: +m[2], b: +m[3] };
+  const named = { black: "#000000", white: "#ffffff", red: "#ff0000" };
+  if (named[s.toLowerCase()]) return parseColor(named[s.toLowerCase()]);
+  return null;
+}
+
+function hex(c) {
+  if (!c) return "?";
+  const h2 = (n) => n.toString(16).padStart(2, "0");
+  return `#${h2(c.r)}${h2(c.g)}${h2(c.b)}`;
+}
+
+function relLuminance({ r, g, b }) {
+  const ch = (v) => {
+    const x = v / 255;
+    return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * ch(r) + 0.7152 * ch(g) + 0.0722 * ch(b);
+}
+
+function contrastRatio(a, b) {
+  const la = relLuminance(a);
+  const lb = relLuminance(b);
+  const hi = Math.max(la, lb);
+  const lo = Math.min(la, lb);
+  return (hi + 0.05) / (lo + 0.05);
 }
 
 // ---- structured language tools (real chatJSON) ----------------------------
@@ -505,7 +794,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     // ---- stub deps (every "real call" is replaced with a deterministic stub) ----
     const events = [];
     const emit = (ev) => events.push(ev);
-    const calls = { chat: 0, chatJSON: 0, codexBuild: 0, codexRun: 0, recallLessons: 0, recallInRun: 0, writeTrace: 0 };
+    const calls = { chat: 0, chatJSON: 0, codexBuild: 0, codexRun: 0, recallLessons: 0, recallInRun: 0, writeTrace: 0, genImage: 0 };
+    let lastBuildCopyHint = "";
 
     const brand = {
       colors: { primary: "#FE2C55", accent: "#25F4EE", bg: "#000000", fg: "#FFFFFF" },
@@ -532,8 +822,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         // Return a superset; runLanguageTool reads only what each schema needs.
         return { hero: "Go viral. Get customers.", angle: "Sound-on demand engine", sections: ["a","b","c","d","e"], findings: ["weak CTA contrast"], scale: "1.25 ratio", notes: "use heading font for h1-h3" };
       },
-      async codexBuildSite() { calls.codexBuild++; return "<!doctype html><html><head></head><body><a style='background:#25F4EE'>CTA</a></body></html>"; },
+      async codexBuildSite({ copyHint } = {}) {
+        calls.codexBuild++;
+        lastBuildCopyHint = String(copyHint || "");
+        // Echo any embedded hero image so we can assert the builder used it.
+        const imgMatch = lastBuildCopyHint.match(/<img[^>]*src="([^"]+)"[^>]*>/i);
+        const img = imgMatch ? imgMatch[0] : "";
+        return `<!doctype html><html lang="en"><head></head><body>${img}<a style='background:#25F4EE;color:#000000'>CTA</a></body></html>`;
+      },
       async codexRun() { calls.codexRun++; return "<svg viewBox='0 0 10 10'><rect width='10' height='10' fill='#FE2C55'/></svg>"; },
+      // Stub for image_gen (image.mjs is built in parallel; frozen {path,dataUri}).
+      async generateImage() { calls.genImage++; return { path: "/tmp/hero.png", dataUri: "data:image/png;base64,STUBHEROIMAGE==" }; },
     };
 
     const baseCtx = () => ({ copyHint: "", seq: 0 });
@@ -613,6 +912,67 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     });
     log(events.some((e) => e.type === "trace.written"), "cognee_trace: emits trace.written");
     log(calls.writeTrace >= 1, "cognee_trace: made real writeTrace call");
+
+    // ---- 7b) image_gen: threads a data URI; builder embeds it ----
+    events.length = 0;
+    calls.genImage = 0; calls.codexBuild = 0;
+    const imgCtx = { copyHint: "Go viral.", seq: 0 };
+    r = await runAgent({
+      agent: { role: "image-sourcer", version: 1, instructions: "Make an on-brand hero image.", tools: ["image_gen"] },
+      gen: 0, page: "memory", ctx: imgCtx, deps, emit,
+    });
+    log(calls.genImage === 1, "image_gen: made real generateImage call");
+    log(r.produces === "image" && r.output && r.output.dataUri.startsWith("data:image/"), "image_gen: returns {dataUri}");
+    log(imgCtx.heroImage === "data:image/png;base64,STUBHEROIMAGE==", "image_gen: threads ctx.heroImage");
+    log(events.some((e) => e.type === "agent.status" && /hero image/i.test(e.doing)), "image_gen: emits status naming the skill");
+    // a builder that runs AFTER image_gen embeds the threaded image
+    r = await runAgent({
+      agent: { role: "frontend-implementer", version: 1, instructions: "Build the page.", tools: ["html_build"] },
+      gen: 0, page: "memory", ctx: imgCtx, deps, emit,
+    });
+    log(/STUBHEROIMAGE/.test(lastBuildCopyHint), "image_gen->html_build: hero image passed to builder copyHint");
+    log(typeof r.output === "string" && /STUBHEROIMAGE/.test(r.output), "image_gen->html_build: produced HTML embeds the image");
+
+    // ---- 7c) image_gen + html_build on the SAME agent ----
+    const oneCtx = { copyHint: "", seq: 0 };
+    r = await runAgent({
+      agent: { role: "frontend-implementer", version: 1, instructions: "Make a hero image then build the page.", tools: ["image_gen", "html_build"] },
+      gen: 1, page: "memory", ctx: oneCtx, deps, emit,
+    });
+    log(r.produces === "html" && /STUBHEROIMAGE/.test(r.output), "image_gen+html_build (one agent): build embeds its own image");
+
+    // ---- 7d) a11y_check: real issues on bad HTML, clean on good ----
+    const badA11y = "<html><body><img src='x.png'><button></button></body></html>";
+    const a11yIssues = a11yCheck(badA11y);
+    log(a11yIssues.some((i) => /alt/i.test(i)), "a11y_check: flags missing alt");
+    log(a11yIssues.some((i) => /accessible name/i.test(i)), "a11y_check: flags unnamed button");
+    log(a11yIssues.some((i) => /lang/i.test(i)), "a11y_check: flags missing lang");
+    const goodA11y = "<html lang='en'><body><img src='x.png' alt='hero'><button aria-label='Start'>x</button><a href='#'>Start free</a></body></html>";
+    log(a11yCheck(goodA11y).length === 0, "a11y_check: clean HTML -> []");
+
+    // ---- 7e) contrast_check: flags low-contrast inline pair ----
+    const lowC = "<html><body><p style='color:#777777;background-color:#888888'>hi</p></body></html>";
+    log(contrastCheck(lowC, brand).some((i) => /contrast/i.test(i)), "contrast_check: flags low-contrast pair");
+    const goodC = "<html><body><p style='color:#000000;background-color:#FFFFFF'>hi</p></body></html>";
+    log(contrastCheck(goodC, brand).length === 0, "contrast_check: black on white -> []");
+
+    // ---- 7f) copy_lint: flags banned buzzwords ----
+    const buzzHtml = "<html><body><h1>Our revolutionary, best-in-class platform</h1></body></html>";
+    const lintIssues = copyLint(buzzHtml);
+    log(lintIssues.some((i) => /revolutionary/i.test(i)), "copy_lint: flags 'revolutionary'");
+    log(copyLint("<h1>Go viral. Get customers.</h1>").length === 0, "copy_lint: clean copy -> []");
+
+    // ---- 7g) a check skill EXECUTES inside runAgent + folds into findings ----
+    events.length = 0;
+    const checkCtx = { copyHint: "", seq: 0, html: "<html><body><img src='x.png'><h1>revolutionary tool</h1></body></html>" };
+    r = await runAgent({
+      agent: { role: "critique", version: 1, instructions: "Audit a11y, contrast and copy on the built page.", tools: ["a11y_check", "copy_lint"] },
+      gen: 0, page: "memory", ctx: checkCtx, deps, emit,
+    });
+    log(Array.isArray(r.findings) && r.findings.some((f) => /a11y/i.test(f)) && r.findings.some((f) => /copy_lint/i.test(f)), "runAgent: granted checks execute + return findings");
+    log(Array.isArray(checkCtx.findings) && checkCtx.findings.length >= 1, "runAgent: check findings folded into ctx.findings");
+    log(events.some((e) => e.type === "agent.status" && /a11y_check/i.test(e.doing)), "runAgent: emits status naming a11y_check");
+    log(events.some((e) => e.type === "agent.status" && /copy_lint/i.test(e.doing)), "runAgent: emits status naming copy_lint");
 
     // ---- 8) tool-less agent still makes a real call (not cosmetic) ----
     calls.chat = 0;

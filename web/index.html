@@ -107,6 +107,130 @@
     /* Scrollbar */
     *::-webkit-scrollbar { width: 9px; height: 9px; }
     *::-webkit-scrollbar-thumb { background: #2a2a31; border-radius: 9px; }
+
+    /* ===== UPSKILL FOCUS PANEL (the demo climax) ===== */
+    @keyframes focusIn {
+      0%   { opacity: 0; transform: translate(-50%, -46%) scale(0.94); }
+      100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    }
+    @keyframes scrimIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+    #upskillScrim {
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(3,3,6,0.74);
+      backdrop-filter: blur(6px);
+      display: none;
+      animation: scrimIn 0.25s ease both;
+    }
+    #upskillScrim.show { display: block; }
+    #upskillPanel {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(920px, 92vw);
+      max-height: 88vh; overflow-y: auto;
+      z-index: 51;
+      border-radius: 22px;
+      border: 1px solid rgba(37,244,238,0.45);
+      background:
+        radial-gradient(900px 360px at 0% -20%, rgba(37,244,238,0.16), transparent 60%),
+        radial-gradient(700px 320px at 110% 0%, rgba(254,44,85,0.12), transparent 55%),
+        #0a0a0f;
+      box-shadow: 0 0 0 1px rgba(37,244,238,0.10), 0 40px 120px rgba(0,0,0,0.7), 0 0 80px rgba(37,244,238,0.18);
+      animation: focusIn 0.4s cubic-bezier(.2,.85,.25,1) both;
+      padding: 22px 24px 24px;
+    }
+    .upskill-eyebrow {
+      font-size: 10px; font-weight: 900; letter-spacing: 0.22em;
+      text-transform: uppercase; color: rgba(37,244,238,0.9);
+      display: inline-flex; align-items: center; gap: 7px;
+    }
+    .upskill-eyebrow::before {
+      content: ""; width: 7px; height: 7px; border-radius: 9999px;
+      background: #25F4EE; box-shadow: 0 0 12px #25F4EE;
+    }
+    .upskill-title { font-size: 30px; font-weight: 900; letter-spacing: -0.01em; line-height: 1.05; }
+    .upskill-vbump {
+      font-variant-numeric: tabular-nums;
+      color: #25F4EE; font-weight: 900;
+    }
+    .upskill-arrow { color: rgba(255,255,255,0.35); margin: 0 8px; }
+    /* Score delta pill */
+    .delta-pill {
+      display: inline-flex; align-items: baseline; gap: 6px;
+      padding: 6px 12px; border-radius: 9999px;
+      background: rgba(37,244,238,0.12);
+      border: 1px solid rgba(37,244,238,0.35);
+      font-variant-numeric: tabular-nums; font-weight: 900;
+    }
+    .delta-pill.neg { background: rgba(254,44,85,0.12); border-color: rgba(254,44,85,0.35); }
+    .delta-from { font-size: 13px; color: rgba(255,255,255,0.55); font-weight: 700; }
+    .delta-to { font-size: 22px; color: #fff; }
+    .delta-amt { font-size: 13px; color: #25F4EE; }
+    .delta-pill.neg .delta-amt { color: #ff7793; }
+    /* Lesson card */
+    .lesson-card {
+      margin-top: 16px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,221,87,0.40);
+      background: linear-gradient(180deg, rgba(255,221,87,0.12), rgba(255,221,87,0.04));
+      padding: 12px 16px;
+    }
+    .lesson-label {
+      font-size: 9px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase;
+      color: #ffdd57;
+    }
+    .lesson-text {
+      margin-top: 5px; font-size: 15px; line-height: 1.45; font-weight: 600;
+      color: #fff4cf;
+    }
+    /* Diff columns */
+    .diff-wrap { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 680px) { .diff-wrap { grid-template-columns: 1fr; } }
+    .diff-col-label {
+      font-size: 9px; font-weight: 900; letter-spacing: 0.18em; text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .diff-col-label.before { color: rgba(255,255,255,0.4); }
+    .diff-col-label.after { color: #25F4EE; }
+    .diff-box {
+      border-radius: 12px; border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.025);
+      padding: 12px 14px;
+      font-size: 12.5px; line-height: 1.55;
+      white-space: pre-wrap; word-break: break-word;
+      max-height: 320px; overflow-y: auto;
+      color: rgba(255,255,255,0.78);
+    }
+    .diff-box.after { border-color: rgba(37,244,238,0.28); background: rgba(37,244,238,0.04); }
+    .diff-add {
+      background: rgba(52,211,153,0.22);
+      color: #b6f7d8;
+      border-radius: 3px;
+      padding: 0 2px;
+      box-shadow: inset 0 -1px 0 rgba(52,211,153,0.5);
+    }
+    /* Provenance line */
+    .provenance {
+      margin-top: 16px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.02em;
+      color: rgba(255,255,255,0.45);
+      font-variant-numeric: tabular-nums;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    .provenance .lesson-id { color: #ffdd57; }
+    .provenance .prov-arrow { color: rgba(255,255,255,0.3); }
+    .provenance .prov-delta { color: #25F4EE; font-weight: 900; }
+    .provenance .prov-role { color: #fff; }
+    .upskill-close {
+      position: absolute; top: 14px; right: 16px;
+      font-size: 20px; font-weight: 900; line-height: 1;
+      color: rgba(255,255,255,0.4); cursor: pointer; user-select: none;
+      padding: 4px 8px; border-radius: 8px;
+    }
+    .upskill-close:hover { color: #fff; background: rgba(255,255,255,0.08); }
+    .upskill-hint {
+      margin-top: 14px; text-align: center;
+      font-size: 10px; letter-spacing: 0.06em; color: rgba(255,255,255,0.3);
+    }
   </style>
 </head>
 <body class="min-h-screen overflow-hidden">
@@ -249,6 +373,58 @@
       <div class="js-prompt agent-prompt"></div>
     </div>
   </template>
+
+  <!-- ===== UPSKILL FOCUS PANEL (member.upskilled climax) ===== -->
+  <div id="upskillScrim"></div>
+  <div id="upskillPanel" role="dialog" aria-modal="true" aria-label="Agent upskill" style="display:none;">
+    <span id="upskillClose" class="upskill-close" title="Dismiss">×</span>
+
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div class="min-w-0">
+        <div class="upskill-eyebrow">Memory rewrote the prompt</div>
+        <div class="upskill-title mt-2">
+          <span id="upskillRole"></span>
+          <span class="upskill-arrow">→</span>
+          <span class="upskill-vbump"><span id="upskillVfrom"></span> → <span id="upskillVto"></span></span>
+        </div>
+      </div>
+      <div id="upskillDelta" class="delta-pill" style="display:none;">
+        <span class="delta-from"><span id="upskillScoreBefore"></span> →</span>
+        <span class="delta-to" id="upskillScoreAfter"></span>
+        <span class="delta-amt" id="upskillScoreDelta"></span>
+      </div>
+    </div>
+
+    <!-- Lesson -->
+    <div id="upskillLessonCard" class="lesson-card" style="display:none;">
+      <div class="lesson-label">Lesson learned</div>
+      <div class="lesson-text" id="upskillLessonText"></div>
+    </div>
+
+    <!-- Before / After diff -->
+    <div class="diff-wrap">
+      <div>
+        <div class="diff-col-label before">Prompt v<span id="upskillVfrom2"></span> · before</div>
+        <div class="diff-box" id="upskillBefore"></div>
+      </div>
+      <div>
+        <div class="diff-col-label after">Prompt v<span id="upskillVto2"></span> · after (added in green)</div>
+        <div class="diff-box after" id="upskillAfter"></div>
+      </div>
+    </div>
+
+    <!-- Provenance -->
+    <div class="provenance" id="upskillProvenance" style="display:none;">
+      <span>lesson</span>
+      <span class="lesson-id" id="upskillProvId"></span>
+      <span class="prov-arrow">→</span>
+      <span class="prov-delta" id="upskillProvDelta"></span>
+      <span>on</span>
+      <span class="prov-role" id="upskillProvRole"></span>
+    </div>
+
+    <div class="upskill-hint">click anywhere to dismiss</div>
+  </div>
 
   <script src="app.js"></script>
 </body>
