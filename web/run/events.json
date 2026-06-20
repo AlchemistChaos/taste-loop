@@ -1,0 +1,920 @@
+{
+  "runId": "demo",
+  "turnBudget": 20,
+  "live": true,
+  "events": [
+    {
+      "t": 2,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "run.started"
+    },
+    {
+      "t": 2,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "master.planned",
+      "roster": [
+        "brand-deconstruct",
+        "copywriter",
+        "visual-designer",
+        "frontend-implementer",
+        "critique"
+      ]
+    },
+    {
+      "t": 2,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.spawned",
+      "agentId": "no-memory-brand-deconstruct-v1-g0",
+      "role": "brand-deconstruct",
+      "version": 1
+    },
+    {
+      "t": 2,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.status",
+      "agentId": "no-memory-brand-deconstruct-v1-g0",
+      "doing": "loading TikTok BrandSpec"
+    },
+    {
+      "t": 2,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.turn",
+      "agentId": "no-memory-brand-deconstruct-v1-g0",
+      "turnIndex": 1
+    },
+    {
+      "t": 2,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.spawned",
+      "agentId": "no-memory-copywriter-v1-g0",
+      "role": "copywriter",
+      "version": 1
+    },
+    {
+      "t": 2,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.status",
+      "agentId": "no-memory-copywriter-v1-g0",
+      "doing": "writing 5-section TikTok copy"
+    },
+    {
+      "t": 3,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.turn",
+      "agentId": "no-memory-copywriter-v1-g0",
+      "turnIndex": 2
+    },
+    {
+      "t": 14,
+      "page": "memory",
+      "gen": 0,
+      "type": "run.started"
+    },
+    {
+      "t": 14,
+      "page": "memory",
+      "gen": 0,
+      "type": "master.planned",
+      "roster": [
+        "brand-deconstruct",
+        "copywriter",
+        "visual-designer",
+        "frontend-implementer",
+        "critique"
+      ]
+    },
+    {
+      "t": 14,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.spawned",
+      "agentId": "memory-brand-deconstruct-v1-g0",
+      "role": "brand-deconstruct",
+      "version": 1
+    },
+    {
+      "t": 14,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.status",
+      "agentId": "memory-brand-deconstruct-v1-g0",
+      "doing": "loading TikTok BrandSpec"
+    },
+    {
+      "t": 14,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.turn",
+      "agentId": "memory-brand-deconstruct-v1-g0",
+      "turnIndex": 1
+    },
+    {
+      "t": 14,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.spawned",
+      "agentId": "memory-copywriter-v1-g0",
+      "role": "copywriter",
+      "version": 1
+    },
+    {
+      "t": 14,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.status",
+      "agentId": "memory-copywriter-v1-g0",
+      "doing": "writing 5-section TikTok copy"
+    },
+    {
+      "t": 14,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.turn",
+      "agentId": "memory-copywriter-v1-g0",
+      "turnIndex": 2
+    },
+    {
+      "t": 8656,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.spawned",
+      "agentId": "no-memory-visual-designer-v1-g0",
+      "role": "visual-designer",
+      "version": 1
+    },
+    {
+      "t": 8656,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.status",
+      "agentId": "no-memory-visual-designer-v1-g0",
+      "doing": "composing on-brand layout"
+    },
+    {
+      "t": 8656,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.turn",
+      "agentId": "no-memory-visual-designer-v1-g0",
+      "turnIndex": 3
+    },
+    {
+      "t": 8656,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.spawned",
+      "agentId": "no-memory-frontend-implementer-v1-g0",
+      "role": "frontend-implementer",
+      "version": 1
+    },
+    {
+      "t": 8656,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.status",
+      "agentId": "no-memory-frontend-implementer-v1-g0",
+      "doing": "rendering self-contained HTML+Tailwind"
+    },
+    {
+      "t": 8656,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.turn",
+      "agentId": "no-memory-frontend-implementer-v1-g0",
+      "turnIndex": 4
+    },
+    {
+      "t": 8658,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "design.rendered",
+      "htmlRef": "snapshots/no-memory-g0-s1.html"
+    },
+    {
+      "t": 8658,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.spawned",
+      "agentId": "no-memory-critique-v1-g0",
+      "role": "critique",
+      "version": 1
+    },
+    {
+      "t": 8658,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.status",
+      "agentId": "no-memory-critique-v1-g0",
+      "doing": "auditing against brand rules"
+    },
+    {
+      "t": 8658,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.turn",
+      "agentId": "no-memory-critique-v1-g0",
+      "turnIndex": 5
+    },
+    {
+      "t": 18673,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.spawned",
+      "agentId": "memory-visual-designer-v1-g0",
+      "role": "visual-designer",
+      "version": 1
+    },
+    {
+      "t": 18673,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.status",
+      "agentId": "memory-visual-designer-v1-g0",
+      "doing": "composing on-brand layout"
+    },
+    {
+      "t": 18673,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.turn",
+      "agentId": "memory-visual-designer-v1-g0",
+      "turnIndex": 3
+    },
+    {
+      "t": 18673,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.spawned",
+      "agentId": "memory-frontend-implementer-v1-g0",
+      "role": "frontend-implementer",
+      "version": 1
+    },
+    {
+      "t": 18673,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.status",
+      "agentId": "memory-frontend-implementer-v1-g0",
+      "doing": "rendering self-contained HTML+Tailwind"
+    },
+    {
+      "t": 18673,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.turn",
+      "agentId": "memory-frontend-implementer-v1-g0",
+      "turnIndex": 4
+    },
+    {
+      "t": 18673,
+      "page": "memory",
+      "gen": 0,
+      "type": "design.rendered",
+      "htmlRef": "snapshots/memory-g0-s1.html"
+    },
+    {
+      "t": 18674,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.spawned",
+      "agentId": "memory-critique-v1-g0",
+      "role": "critique",
+      "version": 1
+    },
+    {
+      "t": 18674,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.status",
+      "agentId": "memory-critique-v1-g0",
+      "doing": "auditing against brand rules"
+    },
+    {
+      "t": 18674,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.turn",
+      "agentId": "memory-critique-v1-g0",
+      "turnIndex": 5
+    },
+    {
+      "t": 19519,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "critique.made",
+      "findings": [
+        "NO gradients",
+        "no generic AI stock",
+        "no tiny text"
+      ]
+    },
+    {
+      "t": 19519,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "agent.status",
+      "agentId": "no-memory-critique-v1-g0-judge",
+      "doing": "scoring the page"
+    },
+    {
+      "t": 19811,
+      "page": "memory",
+      "gen": 0,
+      "type": "critique.made",
+      "findings": [
+        "NO gradients",
+        "no generic AI stock"
+      ]
+    },
+    {
+      "t": 19811,
+      "page": "memory",
+      "gen": 0,
+      "type": "trace.written",
+      "agentId": "memory-critique-g0",
+      "summary": "NO gradients"
+    },
+    {
+      "t": 19811,
+      "page": "memory",
+      "gen": 0,
+      "type": "trace.written",
+      "agentId": "memory-critique-g0",
+      "summary": "no generic AI stock"
+    },
+    {
+      "t": 19811,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.spawned",
+      "agentId": "memory-visual-designer-v1-g0-revise",
+      "role": "visual-designer",
+      "version": 1
+    },
+    {
+      "t": 19811,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.status",
+      "agentId": "memory-visual-designer-v1-g0-revise",
+      "doing": "recalling traces to fix flaws"
+    },
+    {
+      "t": 19811,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.turn",
+      "agentId": "memory-visual-designer-v1-g0-revise",
+      "turnIndex": 6
+    },
+    {
+      "t": 19811,
+      "page": "memory",
+      "gen": 0,
+      "type": "memory.recalled",
+      "agentId": "memory-visual-designer-v1-g0-revise",
+      "hits": [
+        {
+          "snippet": "NO gradients"
+        },
+        {
+          "snippet": "no generic AI stock"
+        }
+      ]
+    },
+    {
+      "t": 19812,
+      "page": "memory",
+      "gen": 0,
+      "type": "design.rendered",
+      "htmlRef": "snapshots/memory-g0-s2.html"
+    },
+    {
+      "t": 19812,
+      "page": "memory",
+      "gen": 0,
+      "type": "agent.status",
+      "agentId": "memory-critique-v1-g0-judge",
+      "doing": "scoring the page"
+    },
+    {
+      "t": 20485,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "team.judged",
+      "score": 79,
+      "category": "strong"
+    },
+    {
+      "t": 20485,
+      "page": "no-memory",
+      "gen": 0,
+      "type": "score.updated",
+      "score": 79
+    },
+    {
+      "t": 20485,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "master.planned",
+      "roster": [
+        "brand-deconstruct",
+        "copywriter",
+        "visual-designer",
+        "frontend-implementer",
+        "critique"
+      ]
+    },
+    {
+      "t": 20485,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.spawned",
+      "agentId": "no-memory-brand-deconstruct-v1-g1",
+      "role": "brand-deconstruct",
+      "version": 1
+    },
+    {
+      "t": 20485,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.status",
+      "agentId": "no-memory-brand-deconstruct-v1-g1",
+      "doing": "loading TikTok BrandSpec"
+    },
+    {
+      "t": 20485,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.turn",
+      "agentId": "no-memory-brand-deconstruct-v1-g1",
+      "turnIndex": 6
+    },
+    {
+      "t": 20485,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.spawned",
+      "agentId": "no-memory-copywriter-v1-g1",
+      "role": "copywriter",
+      "version": 1
+    },
+    {
+      "t": 20485,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.status",
+      "agentId": "no-memory-copywriter-v1-g1",
+      "doing": "writing 5-section TikTok copy"
+    },
+    {
+      "t": 20485,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.turn",
+      "agentId": "no-memory-copywriter-v1-g1",
+      "turnIndex": 7
+    },
+    {
+      "t": 20752,
+      "page": "memory",
+      "gen": 0,
+      "type": "team.judged",
+      "score": 93,
+      "category": "excellent"
+    },
+    {
+      "t": 20752,
+      "page": "memory",
+      "gen": 0,
+      "type": "score.updated",
+      "score": 93
+    },
+    {
+      "t": 20752,
+      "page": "memory",
+      "gen": 0,
+      "type": "memory.distilled",
+      "lessonsAccepted": [
+        {
+          "statement": "Going forward: nO gradients"
+        },
+        {
+          "statement": "Going forward: no generic AI stock"
+        }
+      ]
+    },
+    {
+      "t": 20752,
+      "page": "memory",
+      "gen": 1,
+      "type": "master.planned",
+      "roster": [
+        "brand-deconstruct",
+        "copywriter",
+        "visual-designer",
+        "frontend-implementer",
+        "critique"
+      ]
+    },
+    {
+      "t": 20752,
+      "page": "memory",
+      "gen": 1,
+      "type": "member.upskilled",
+      "role": "visual-designer",
+      "version": 2
+    },
+    {
+      "t": 20752,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.spawned",
+      "agentId": "memory-brand-deconstruct-v1-g1",
+      "role": "brand-deconstruct",
+      "version": 1
+    },
+    {
+      "t": 20752,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.status",
+      "agentId": "memory-brand-deconstruct-v1-g1",
+      "doing": "loading TikTok BrandSpec"
+    },
+    {
+      "t": 20752,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.turn",
+      "agentId": "memory-brand-deconstruct-v1-g1",
+      "turnIndex": 7
+    },
+    {
+      "t": 20752,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.spawned",
+      "agentId": "memory-copywriter-v1-g1",
+      "role": "copywriter",
+      "version": 1
+    },
+    {
+      "t": 20752,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.status",
+      "agentId": "memory-copywriter-v1-g1",
+      "doing": "writing 5-section TikTok copy"
+    },
+    {
+      "t": 20752,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.turn",
+      "agentId": "memory-copywriter-v1-g1",
+      "turnIndex": 8
+    },
+    {
+      "t": 28633,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.spawned",
+      "agentId": "no-memory-visual-designer-v1-g1",
+      "role": "visual-designer",
+      "version": 1
+    },
+    {
+      "t": 28633,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.status",
+      "agentId": "no-memory-visual-designer-v1-g1",
+      "doing": "composing on-brand layout"
+    },
+    {
+      "t": 28633,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.turn",
+      "agentId": "no-memory-visual-designer-v1-g1",
+      "turnIndex": 8
+    },
+    {
+      "t": 28633,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.spawned",
+      "agentId": "no-memory-frontend-implementer-v1-g1",
+      "role": "frontend-implementer",
+      "version": 1
+    },
+    {
+      "t": 28633,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.status",
+      "agentId": "no-memory-frontend-implementer-v1-g1",
+      "doing": "rendering self-contained HTML+Tailwind"
+    },
+    {
+      "t": 28633,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.turn",
+      "agentId": "no-memory-frontend-implementer-v1-g1",
+      "turnIndex": 9
+    },
+    {
+      "t": 28634,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "design.rendered",
+      "htmlRef": "snapshots/no-memory-g1-s1.html"
+    },
+    {
+      "t": 28634,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.spawned",
+      "agentId": "no-memory-critique-v1-g1",
+      "role": "critique",
+      "version": 1
+    },
+    {
+      "t": 28634,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.status",
+      "agentId": "no-memory-critique-v1-g1",
+      "doing": "auditing against brand rules"
+    },
+    {
+      "t": 28634,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.turn",
+      "agentId": "no-memory-critique-v1-g1",
+      "turnIndex": 10
+    },
+    {
+      "t": 33770,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.spawned",
+      "agentId": "memory-visual-designer-v2-g1",
+      "role": "visual-designer",
+      "version": 2
+    },
+    {
+      "t": 33770,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.status",
+      "agentId": "memory-visual-designer-v2-g1",
+      "doing": "applying learned lessons (v2)"
+    },
+    {
+      "t": 33770,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.turn",
+      "agentId": "memory-visual-designer-v2-g1",
+      "turnIndex": 9
+    },
+    {
+      "t": 33770,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.spawned",
+      "agentId": "memory-frontend-implementer-v1-g1",
+      "role": "frontend-implementer",
+      "version": 1
+    },
+    {
+      "t": 33771,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.status",
+      "agentId": "memory-frontend-implementer-v1-g1",
+      "doing": "rendering self-contained HTML+Tailwind"
+    },
+    {
+      "t": 33771,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.turn",
+      "agentId": "memory-frontend-implementer-v1-g1",
+      "turnIndex": 10
+    },
+    {
+      "t": 33771,
+      "page": "memory",
+      "gen": 1,
+      "type": "design.rendered",
+      "htmlRef": "snapshots/memory-g1-s1.html"
+    },
+    {
+      "t": 33771,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.spawned",
+      "agentId": "memory-critique-v1-g1",
+      "role": "critique",
+      "version": 1
+    },
+    {
+      "t": 33771,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.status",
+      "agentId": "memory-critique-v1-g1",
+      "doing": "auditing against brand rules"
+    },
+    {
+      "t": 33771,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.turn",
+      "agentId": "memory-critique-v1-g1",
+      "turnIndex": 11
+    },
+    {
+      "t": 34653,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "critique.made",
+      "findings": [
+        "NO gradients",
+        "no generic AI stock",
+        "no tiny text"
+      ]
+    },
+    {
+      "t": 34653,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "agent.status",
+      "agentId": "no-memory-critique-v1-g1-judge",
+      "doing": "scoring the page"
+    },
+    {
+      "t": 35040,
+      "page": "memory",
+      "gen": 1,
+      "type": "critique.made",
+      "findings": [
+        "NO gradients",
+        "no generic AI stock",
+        "no tiny text"
+      ]
+    },
+    {
+      "t": 35040,
+      "page": "memory",
+      "gen": 1,
+      "type": "trace.written",
+      "agentId": "memory-critique-g1",
+      "summary": "NO gradients"
+    },
+    {
+      "t": 35040,
+      "page": "memory",
+      "gen": 1,
+      "type": "trace.written",
+      "agentId": "memory-critique-g1",
+      "summary": "no generic AI stock"
+    },
+    {
+      "t": 35040,
+      "page": "memory",
+      "gen": 1,
+      "type": "trace.written",
+      "agentId": "memory-critique-g1",
+      "summary": "no tiny text"
+    },
+    {
+      "t": 35040,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.spawned",
+      "agentId": "memory-visual-designer-v2-g1-revise",
+      "role": "visual-designer",
+      "version": 2
+    },
+    {
+      "t": 35040,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.status",
+      "agentId": "memory-visual-designer-v2-g1-revise",
+      "doing": "recalling traces to fix flaws"
+    },
+    {
+      "t": 35040,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.turn",
+      "agentId": "memory-visual-designer-v2-g1-revise",
+      "turnIndex": 12
+    },
+    {
+      "t": 35040,
+      "page": "memory",
+      "gen": 1,
+      "type": "memory.recalled",
+      "agentId": "memory-visual-designer-v2-g1-revise",
+      "hits": [
+        {
+          "snippet": "NO gradients"
+        },
+        {
+          "snippet": "no generic AI stock"
+        },
+        {
+          "snippet": "NO gradients"
+        },
+        {
+          "snippet": "no generic AI stock"
+        },
+        {
+          "snippet": "no tiny text"
+        }
+      ]
+    },
+    {
+      "t": 35040,
+      "page": "memory",
+      "gen": 1,
+      "type": "agent.status",
+      "agentId": "memory-critique-v1-g1-judge",
+      "doing": "scoring the page"
+    },
+    {
+      "t": 35739,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "team.judged",
+      "score": 79,
+      "category": "strong"
+    },
+    {
+      "t": 35739,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "score.updated",
+      "score": 79
+    },
+    {
+      "t": 35739,
+      "page": "no-memory",
+      "gen": 1,
+      "type": "run.finished",
+      "totals": {
+        "agentsSpawned": 12,
+        "turns": 10,
+        "traces": 0,
+        "improvements": 0,
+        "lessons": 0,
+        "score": 79
+      }
+    },
+    {
+      "t": 36009,
+      "page": "memory",
+      "gen": 1,
+      "type": "team.judged",
+      "score": 100,
+      "category": "excellent"
+    },
+    {
+      "t": 36009,
+      "page": "memory",
+      "gen": 1,
+      "type": "score.updated",
+      "score": 100
+    },
+    {
+      "t": 36010,
+      "page": "memory",
+      "gen": 1,
+      "type": "run.finished",
+      "totals": {
+        "agentsSpawned": 14,
+        "turns": 12,
+        "traces": 5,
+        "improvements": 1,
+        "lessons": 2,
+        "score": 100
+      }
+    }
+  ]
+}

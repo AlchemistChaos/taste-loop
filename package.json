@@ -1,0 +1,11 @@
+{
+  "name": "tasteloop-demo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TasteLoop demo — two studios build a TikTok marketing site side by side: no-memory vs memory.",
+  "scripts": {
+    "start": "node web/serve.mjs",
+    "build": "node web/run.mjs"
+  }
+}

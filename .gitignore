@@ -1,0 +1,31 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Env / secrets
+.env
+.env.local
+cognee.env
+
+# Local scratch / extracted artifacts
+/tmp/
+agent_evo_extracted/
+*.zip
+
+# OMC state
+.omc/
+
+# Cognee local data (regenerated at runtime)
+web/run/cognee-data/
+.cognee_system/
