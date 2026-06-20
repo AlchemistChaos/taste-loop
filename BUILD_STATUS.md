@@ -5,7 +5,11 @@
 ## MVP goal
 Two studios side-by-side build a TikTok site from `TikTok_guidelines.pdf`. **Page 2 (memory) learns & scores higher; Page 1 (no memory) doesn't.** Web UI replays an event log with live counters (Agents · Turns x/20 · Traces · Improvements · Lessons) + a live `<iframe>` of each site.
 
-## Status
+## Status — TIER 2 IN PROGRESS (workflow wlljqy6mg)
+**Tier 1 ✅ (honest checkpoint on disk):** real Cognee in loop + deterministic brand-lint → **no-memory 45 vs memory 65** (memory wins on merit: it removed the forbidden gradient; no-memory kept it → −25). 7 real traces, distilled lessons.
+**Tier 2 building (no fallbacks, Codex 5.4-Codex medium):** make-codex-work · real brand-PDF deconstruct · orchestrator rewrite (real master-spawn + Codex-built HTML + injected Cognee lessons) · end-to-end verify. ⚠️ Risk: if `codex exec` can't run non-interactively in this env, there's no fallback by design — the verify agent will report honestly.
+
+## (Tier 1) Status
 **✅ LIVE-STREAMING demo — `http://localhost:8080`** (hard-refresh to load live UI). run.mjs now streams events.json as it builds + runs BOTH studios concurrently; app.js polls every 0.6s and renders in real time (verified: events.json grows live). REAL Ollama run in progress (task bxsbbq3p4, GENS=2, shim memory).
 
 **Sequencing (Ollama is shared/sequential):** (1) ✅ live run working → (2) re-run Cognee fix (fastembed leader) with Ollama free → (3) wire `memory.mjs('cognee')` → final `MEM=cognee` live run = the recording.

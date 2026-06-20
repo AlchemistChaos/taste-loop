@@ -11,7 +11,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 
 import { deconstructBrand } from "./src/brand.mjs";
 import { makeMemory } from "./src/memory.mjs";
-import { runPage } from "./src/orchestrator.mjs";
+import { runPage, GOAL } from "./src/orchestrator.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUN_DIR = join(__dirname, "run");
@@ -43,8 +43,12 @@ function makeEmitter(page) {
   };
 }
 
+// A real TikTok product to market (passed into Codex for the site build).
+const GOAL_STR = process.env.GOAL || GOAL;
+
 async function main() {
   console.log(`TasteLoop LIVE run — gens=${GENS} memory=${MEM_KIND}`);
+  console.log(`Goal: ${GOAL_STR}`);
   await mkdir(SNAP_DIR, { recursive: true });
   // Start from an empty log so the UI resets to a clean state immediately.
   await writeFile(OUT, JSON.stringify({ runId: "demo", turnBudget: 20, live: true, events: [] }, null, 2), "utf8");
@@ -58,8 +62,8 @@ async function main() {
   // Run BOTH studios concurrently so events interleave and the UI shows them
   // building side by side in real time.
   await Promise.all([
-    runPage({ page: "no-memory", gens: GENS, memory: makeMemory("none"), brand, emit: makeEmitter("no-memory"), snapDir: SNAP_DIR }),
-    runPage({ page: "memory", gens: GENS, memory: makeMemory(MEM_KIND), brand, emit: makeEmitter("memory"), snapDir: SNAP_DIR }),
+    runPage({ page: "no-memory", gens: GENS, memory: makeMemory("none"), brand, emit: makeEmitter("no-memory"), snapDir: SNAP_DIR, goal: GOAL_STR }),
+    runPage({ page: "memory", gens: GENS, memory: makeMemory(MEM_KIND), brand, emit: makeEmitter("memory"), snapDir: SNAP_DIR, goal: GOAL_STR }),
   ]);
 
   clearInterval(flusher);

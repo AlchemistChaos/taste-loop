@@ -16,7 +16,7 @@
 //
 // No npm deps. Uses node:child_process only for the cognee bridge attempt.
 
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 
 // ---------- tokenization / similarity helpers ----------
 
@@ -195,62 +195,67 @@ function makeNone() {
 // ---------- the "cognee" implementation (with shim fallback) ----------
 
 function makeCognee() {
-  // The shim is the source of truth AND the fallback. We mirror every write
-  // into the shim so stats/recall always work even if the bridge is missing.
+  // The shim mirrors every write so stats/recall still work if the bridge fails.
   const shim = makeShim();
-  const BRIDGE = "web/src/cognee_bridge.py";
+  // Bridge lives next to this module; cognee is installed in the smoke venv.
+  const here = new URL(".", import.meta.url).pathname; // .../web/src/
+  const BRIDGE = here + "cognee_bridge.py";
+  const PY = process.env.COGNEE_PY || "/tmp/cognee_smoke/venv/bin/python3";
+  const TIMEOUT = Number(process.env.COGNEE_TIMEOUT || 90_000);
 
-  // Try the python bridge; on ANY failure, return null and let caller use shim.
-  function tryBridge(cmd, payload) {
-    try {
-      const res = spawnSync("python3", [BRIDGE, cmd, JSON.stringify(payload)], {
-        encoding: "utf8",
-        timeout: 10_000,
+  // ASYNC bridge call — must not block the event loop (keeps the live stream
+  // flushing while cognee/qwen works). Resolves parsed JSON, or null on any error.
+  function execBridge(cmd, payload) {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (v) => { if (!done) { done = true; resolve(v); } };
+      let child;
+      try {
+        child = spawn(PY, [BRIDGE, cmd, JSON.stringify(payload)]);
+      } catch {
+        return finish(null);
+      }
+      let out = "";
+      const killer = setTimeout(() => { try { child.kill("SIGKILL"); } catch {} finish(null); }, TIMEOUT);
+      child.stdout.on("data", (d) => (out += d));
+      child.on("error", () => { clearTimeout(killer); finish(null); });
+      child.on("close", (code) => {
+        clearTimeout(killer);
+        if (code !== 0) return finish(null);
+        try { finish(JSON.parse(out.trim())); } catch { finish(null); }
       });
-      if (res.error) return null;
-      if (typeof res.status === "number" && res.status !== 0) return null;
-      const out = (res.stdout || "").trim();
-      if (!out) return null;
-      return JSON.parse(out);
-    } catch {
-      return null; // never throw
-    }
+    });
   }
 
   return {
     async openSession(id) {
-      tryBridge("openSession", { id });
+      await execBridge("open_session", { sessionId: id });
       return shim.openSession(id);
     },
-    async writeTrace(id, trace) {
-      tryBridge("writeTrace", { id, trace });
-      return shim.writeTrace(id, trace);
+    async writeTrace(id, { role, finding, severity } = {}) {
+      await execBridge("write_trace", { sessionId: id, role, finding, severity });
+      return shim.writeTrace(id, { role, finding, severity });
     },
     async recallInRun(id, query) {
-      const bridged = tryBridge("recallInRun", { id, query });
-      if (Array.isArray(bridged)) return bridged;
+      const b = await execBridge("recall_in_run", { sessionId: id, query });
+      if (b && Array.isArray(b.hits)) return b.hits.map((h) => ({ snippet: h.snippet, role: "memory" }));
       return shim.recallInRun(id, query);
     },
     async distill(id) {
-      const bridged = tryBridge("distill", { id });
-      if (bridged && Array.isArray(bridged.lessonsAccepted)) {
-        // keep shim in sync so stats reflect distillation
-        await shim.distill(id);
-        return bridged;
+      const b = await execBridge("distill", { sessionId: id });
+      if (b && Array.isArray(b.lessonsAccepted)) {
+        await shim.distill(id); // keep shim in sync
+        return { lessonsAccepted: b.lessonsAccepted };
       }
       return shim.distill(id);
     },
     async recallLessons(query) {
-      const bridged = tryBridge("recallLessons", { query });
-      if (Array.isArray(bridged)) return bridged;
+      const b = await execBridge("recall_lessons", { query });
+      if (b && Array.isArray(b.lessons)) return b.lessons.map((l) => ({ statement: l.statement }));
       return shim.recallLessons(query);
     },
     stats() {
-      const bridged = tryBridge("stats", {});
-      if (bridged && typeof bridged.traces === "number" && typeof bridged.lessons === "number") {
-        return bridged;
-      }
-      return shim.stats();
+      return shim.stats(); // bridge has no stats cmd; orchestrator counts events itself
     },
   };
 }

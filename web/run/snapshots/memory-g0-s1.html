@@ -1,264 +1,189 @@
-<!doctype html>
-<html lang="en" class="scroll-smooth">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>[object Object]</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-<script>
-  tailwind.config = {
-    theme: {
-      extend: {
-        colors: {
-          brand: "#FE2C55",
-          accent: "#25F4EE",
-          ink: "#000000",
-          paper: "#FFFFFF"
-        },
-        fontFamily: {
-          heading: ["Inter", "Inter", "system-ui", "sans-serif"],
-          body: ["Inter", "Inter", "system-ui", "sans-serif"]
-        }
-      }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TikTok for Business — Turn 60-Second Videos into Customers</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;600;700;800;900&family=Roboto:wght@400;500;700;900&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --brand-pink: #FE2C55;
+      --brand-cyan: #25F4EE;
+      --brand-black: #000000;
+      --brand-white: #FFFFFF;
     }
-  };
-</script>
-<style>
-  :root { color-scheme: dark; }
-  html, body { background: #000000; }
-  body { font-family: "Inter", "Inter", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
-  h1,h2,h3,h4 { font-family: "Inter", "Inter", system-ui, sans-serif; letter-spacing: -0.02em; }
-  .tl-pill { display:inline-flex; align-items:center; gap:.5rem; }
-</style>
+
+    body {
+      font-family: "Sofia Pro", "League Spartan", "Roboto", Helvetica, Arial, sans-serif;
+      background: var(--brand-black);
+      color: var(--brand-white);
+    }
+
+    .font-display {
+      font-family: "Sofia Pro", "League Spartan", "Roboto", Helvetica, Arial, sans-serif;
+    }
+  </style>
 </head>
-<body class="bg-ink text-paper font-body antialiased">
-
-  <!-- NAV -->
-  <header class="sticky top-0 z-50 backdrop-blur border-b border-white/10 bg-black/70">
-    <div class="mx-auto max-w-6xl px-6 h-16 flex items-center justify-between">
-      <div class="flex items-center gap-2"><svg viewBox="0 0 180 48" width="160" height="42" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TikTok">
-  <g>
-    <!-- note glyph: cyan offset layer -->
-    <path d="M30.5 6.2c1.3 4.4 4.6 7.9 9 9.1v6.6c-2.7-.1-5.3-.9-7.6-2.3v10.6c0 7.2-5.8 13-13 13-2.7 0-5.2-.8-7.3-2.2 2.4 2.6 5.9 4.2 9.7 4.2 7.2 0 13-5.8 13-13V21.4c2.3 1.4 4.9 2.2 7.6 2.3v-6.6c-4.4-1.2-7.7-4.7-9-9.1h-2.4z" fill="#25F4EE"/>
-    <!-- note glyph: red offset layer -->
-    <path d="M27.5 6.2c1.3 4.4 4.6 7.9 9 9.1v6.6c-2.7-.1-5.3-.9-7.6-2.3v10.6c0 7.2-5.8 13-13 13S2.9 37.4 2.9 30.2 8.7 17.2 15.9 17.2c.6 0 1.2 0 1.8.1v6.8c-.6-.2-1.2-.3-1.8-.3-3.4 0-6.2 2.8-6.2 6.2s2.8 6.2 6.2 6.2 6.2-2.8 6.2-6.2V6.2h5.4z" fill="#FE2C55"/>
-    <!-- note glyph: white top layer -->
-    <path d="M29 6.2c1.3 4.4 4.6 7.9 9 9.1v6.6c-2.7-.1-5.3-.9-7.6-2.3v10.6c0 7.2-5.8 13-13 13S4.4 37.4 4.4 30.2 10.2 17.2 17.4 17.2c.6 0 1.2 0 1.8.1v6.8c-.6-.2-1.2-.3-1.8-.3-3.4 0-6.2 2.8-6.2 6.2s2.8 6.2 6.2 6.2 6.2-2.8 6.2-6.2V6.2H29z" fill="#FFFFFF"/>
-  </g>
-  <!-- wordmark -->
-  <g fill="#FFFFFF">
-    <text x="54" y="33" font-family="Inter, system-ui, sans-serif" font-size="26" font-weight="800" letter-spacing="-1">TikTok</text>
-  </g>
-</svg></div>
-      <nav class="hidden md:flex items-center gap-8 text-sm font-semibold text-white/70">
-        <a href="#how" class="hover:text-white transition">How it works</a>
-        <a href="#proof" class="hover:text-white transition">Proof</a>
-        <a href="#cta" class="hover:text-white transition">Pricing</a>
-      </nav>
-      <a href="#cta" class="rounded-full px-5 py-2 text-sm font-bold text-black"
-         style="background:#FE2C55">Get started</a>
-    </div>
-  </header>
-
-  <!-- HERO -->
-  <section class="relative overflow-hidden">
-    <div class="absolute inset-0 -z-10" style="background:#000000"></div>
-    <div class="mx-auto max-w-6xl px-6 pt-16 pb-20 grid md:grid-cols-2 gap-10 items-center">
-      <div>
-        <span class="tl-pill rounded-full px-3 py-1 text-xs font-bold uppercase tracking-widest"
-              style="background:#25F4EE1A;color:#25F4EE">For creators &amp; businesses</span>
-        <h1 class="mt-6 text-5xl md:text-6xl font-black leading-[1.02]">
-          [object Object]
-        </h1>
-        <p class="mt-5 text-lg text-white/70 max-w-md font-medium">
-          Reach a billion people, spark real demand, and turn attention into action — with the platform built for the sound-on generation.
-        </p>
-        <div class="mt-8 flex flex-wrap gap-4">
-          <a href="#cta" class="rounded-full px-7 py-3 text-base font-bold text-black shadow-lg"
-             style="background:#FE2C55">Start for free</a>
-          <a href="#how" class="rounded-full px-7 py-3 text-base font-bold border-2 text-white"
-             style="border-color:#25F4EE;color:#25F4EE">See how it works</a>
-        </div>
-        <div class="mt-10 flex items-center gap-8 text-sm font-semibold text-white/60">
-          <div><span class="block text-2xl font-black text-white">1B+</span>monthly users</div>
-          <div><span class="block text-2xl font-black text-white">7M+</span>businesses</div>
-          <div><span class="block text-2xl font-black text-white">2.5x</span>avg. ROAS lift</div>
-        </div>
+<body class="bg-black text-white antialiased">
+  <section class="bg-black border-b-4 border-[#FE2C55]">
+    <div class="max-w-7xl mx-auto px-6 py-8">
+      <div class="flex items-center justify-between gap-6">
+        <div class="font-display text-2xl md:text-3xl font-extrabold tracking-tight">TikTok for Business</div>
+        <a href="#cta" class="bg-[#FE2C55] text-white px-5 py-3 text-sm md:text-base font-extrabold uppercase tracking-wide">Start Creating</a>
       </div>
-      <div class="relative h-[460px]">
-        <svg viewBox="0 0 520 460" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Brand hero graphic" preserveAspectRatio="xMidYMid meet">
-  <!-- flat backdrop blocks -->
-  <rect x="22" y="60" width="150" height="150" rx="20" fill="#25F4EE" opacity="0.16"/>
-  <rect x="360" y="250" width="140" height="140" rx="20" fill="#FE2C55" opacity="0.18"/>
-  <circle cx="430" cy="80" r="40" fill="#25F4EE" opacity="0.22"/>
-
-  <!-- phone body -->
-  <rect x="170" y="40" width="200" height="380" rx="34" fill="#101013" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="2"/>
-  <rect x="184" y="56" width="172" height="348" rx="22" fill="#000000"/>
-
-  <!-- screen content: stacked color cards (flat) -->
-  <rect x="198" y="78" width="144" height="92" rx="14" fill="#FE2C55"/>
-  <rect x="198" y="182" width="144" height="70" rx="14" fill="#25F4EE"/>
-  <rect x="198" y="264" width="144" height="44" rx="12" fill="#FFFFFF" opacity="0.10"/>
-  <rect x="198" y="318" width="92" height="14" rx="7" fill="#FFFFFF" opacity="0.22"/>
-  <rect x="198" y="342" width="120" height="14" rx="7" fill="#FFFFFF" opacity="0.14"/>
-
-  <!-- center play button -->
-  <circle cx="270" cy="124" r="30" fill="#000000" opacity="0.28"/>
-  <circle cx="270" cy="124" r="30" fill="#FFFFFF" opacity="0.92"/>
-  <path d="M261 110 L286 124 L261 138 Z" fill="#FE2C55"/>
-
-  <!-- notch -->
-  <rect x="246" y="46" width="48" height="9" rx="4.5" fill="#FFFFFF" opacity="0.25"/>
-
-  <!-- sound-wave bars beside the phone (flat accent) -->
-  <g fill="#25F4EE">
-    <rect x="396" y="150" width="12" height="40" rx="6"/>
-    <rect x="416" y="130" width="12" height="80" rx="6"/>
-    <rect x="436" y="110" width="12" height="120" rx="6"/>
-    <rect x="456" y="146" width="12" height="48" rx="6"/>
-  </g>
-  <g fill="#FE2C55">
-    <rect x="70" y="250" width="12" height="64" rx="6"/>
-    <rect x="90" y="230" width="12" height="104" rx="6"/>
-    <rect x="110" y="266" width="12" height="32" rx="6"/>
-  </g>
-</svg>
+    </div>
+    <div class="max-w-7xl mx-auto px-6 pb-16 pt-8 md:pt-14 md:pb-24">
+      <div class="grid lg:grid-cols-2 gap-10 items-stretch">
+        <div class="flex flex-col justify-center">
+          <p class="inline-block bg-[#25F4EE] text-black px-4 py-2 text-sm md:text-base font-extrabold uppercase tracking-[0.12em] w-fit">60 seconds. Real customers.</p>
+          <h1 class="font-display mt-6 text-5xl md:text-7xl lg:text-8xl leading-[0.92] font-black uppercase">
+            Unlock <span class="text-[#FE2C55]">Viral Magic</span> in 60
+          </h1>
+          <p class="mt-6 text-lg md:text-2xl leading-snug max-w-2xl font-medium">
+            Craft videos that captivate and convert your community. Show up fast, hit harder, and turn scrolls into sales with a brand built for TikTok.
+          </p>
+          <div class="mt-8 flex flex-col sm:flex-row gap-4">
+            <a href="#how-it-works" class="bg-[#FE2C55] text-white px-7 py-4 text-base md:text-lg font-extrabold uppercase tracking-wide text-center">See How It Works</a>
+            <a href="#proof" class="border-4 border-white text-white px-7 py-4 text-base md:text-lg font-extrabold uppercase tracking-wide text-center">Watch the Wins</a>
+          </div>
+        </div>
+        <div class="bg-[#FE2C55] p-6 md:p-8 flex flex-col justify-between min-h-[420px]">
+          <div class="flex justify-between items-start gap-4">
+            <div class="bg-black text-white px-4 py-2 font-extrabold uppercase text-sm tracking-wide">Fast creative that sells</div>
+            <div class="bg-white text-black px-4 py-2 font-extrabold uppercase text-sm tracking-wide">Built for the feed</div>
+          </div>
+          <div class="space-y-4">
+            <div class="bg-black p-5">
+              <p class="text-sm uppercase tracking-[0.14em] font-bold text-[#25F4EE]">Hook in 3 seconds</p>
+              <p class="mt-2 text-2xl md:text-3xl font-black uppercase leading-tight">Stop the thumb. Start the conversation.</p>
+            </div>
+            <div class="bg-white p-5 text-black">
+              <p class="text-sm uppercase tracking-[0.14em] font-bold">Story in motion</p>
+              <p class="mt-2 text-2xl md:text-3xl font-black uppercase leading-tight">Make your product feel like the next thing everyone needs.</p>
+            </div>
+            <div class="bg-[#25F4EE] p-5 text-black">
+              <p class="text-sm uppercase tracking-[0.14em] font-bold">CTA that lands</p>
+              <p class="mt-2 text-2xl md:text-3xl font-black uppercase leading-tight">Turn attention into clicks, carts, and loyal fans.</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
 
-  
-    <section class="px-6 py-20 text-center" style="background:linear-gradient(135deg, #FE2C55, #25F4EE);">
-      <div class="mx-auto max-w-4xl">
-        <div class="mb-6 flex justify-center"><svg viewBox="0 0 520 460" width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Brand hero graphic" preserveAspectRatio="xMidYMid meet">
-  <!-- flat backdrop blocks -->
-  <rect x="22" y="60" width="150" height="150" rx="20" fill="#25F4EE" opacity="0.16"/>
-  <rect x="360" y="250" width="140" height="140" rx="20" fill="#FE2C55" opacity="0.18"/>
-  <circle cx="430" cy="80" r="40" fill="#25F4EE" opacity="0.22"/>
-
-  <!-- phone body -->
-  <rect x="170" y="40" width="200" height="380" rx="34" fill="#101013" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="2"/>
-  <rect x="184" y="56" width="172" height="348" rx="22" fill="#000000"/>
-
-  <!-- screen content: stacked color cards (flat) -->
-  <rect x="198" y="78" width="144" height="92" rx="14" fill="#FE2C55"/>
-  <rect x="198" y="182" width="144" height="70" rx="14" fill="#25F4EE"/>
-  <rect x="198" y="264" width="144" height="44" rx="12" fill="#FFFFFF" opacity="0.10"/>
-  <rect x="198" y="318" width="92" height="14" rx="7" fill="#FFFFFF" opacity="0.22"/>
-  <rect x="198" y="342" width="120" height="14" rx="7" fill="#FFFFFF" opacity="0.14"/>
-
-  <!-- center play button -->
-  <circle cx="270" cy="124" r="30" fill="#000000" opacity="0.28"/>
-  <circle cx="270" cy="124" r="30" fill="#FFFFFF" opacity="0.92"/>
-  <path d="M261 110 L286 124 L261 138 Z" fill="#FE2C55"/>
-
-  <!-- notch -->
-  <rect x="246" y="46" width="48" height="9" rx="4.5" fill="#FFFFFF" opacity="0.25"/>
-
-  <!-- sound-wave bars beside the phone (flat accent) -->
-  <g fill="#25F4EE">
-    <rect x="396" y="150" width="12" height="40" rx="6"/>
-    <rect x="416" y="130" width="12" height="80" rx="6"/>
-    <rect x="436" y="110" width="12" height="120" rx="6"/>
-    <rect x="456" y="146" width="12" height="48" rx="6"/>
-  </g>
-  <g fill="#FE2C55">
-    <rect x="70" y="250" width="12" height="64" rx="6"/>
-    <rect x="90" y="230" width="12" height="104" rx="6"/>
-    <rect x="110" y="266" width="12" height="32" rx="6"/>
-  </g>
-</svg></div>
-        <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight" style="color:#FFFFFF;">[object Object]</h1>
-        <p class="mt-6 text-xl md:text-2xl" style="color:#FFFFFF;opacity:.85;">[object Object]</p>
-        <a href="#cta" class="mt-10 inline-block rounded-full px-8 py-4 text-lg font-bold"
-           style="background:#FE2C55;color:#FFFFFF;">[object Object]</a>
-      </div>
-    </section>
-
-    <section class="px-6 py-16" style="background:#000000;">
-      <div class="mx-auto max-w-5xl">
-        <h2 class="text-3xl md:text-4xl font-bold" style="color:#FFFFFF;">Problem: Limited Reach & Engagement</h2>
-        <p class="mt-4 text-lg" style="color:#FFFFFF;opacity:.8;">Finding new followers and increasing engagement can be a daunting task. Many creators and businesses struggle to break through the noise.</p>
-      </div>
-    </section>
-
-    <section class="px-6 py-16" style="background:#FE2C55;">
-      <div class="mx-auto max-w-5xl">
-        <h2 class="text-3xl md:text-4xl font-bold" style="color:#FFFFFF;">How It Works: Our Solutions Are Designed for You</h2>
-        <div class="mt-8 grid gap-6 md:grid-cols-3">
-          
-            <div class="rounded-2xl p-6" style="background:#000000;">
-              <div class="text-4xl font-extrabold" style="color:#25F4EE;">1</div>
-              <p class="mt-3 text-lg font-semibold" style="color:#FFFFFF;">[object Object]</p>
-            </div>
-            <div class="rounded-2xl p-6" style="background:#000000;">
-              <div class="text-4xl font-extrabold" style="color:#25F4EE;">2</div>
-              <p class="mt-3 text-lg font-semibold" style="color:#FFFFFF;">[object Object]</p>
-            </div>
-            <div class="rounded-2xl p-6" style="background:#000000;">
-              <div class="text-4xl font-extrabold" style="color:#25F4EE;">3</div>
-              <p class="mt-3 text-lg font-semibold" style="color:#FFFFFF;">[object Object]</p>
-            </div>
+  <section class="bg-[#25F4EE] text-black border-b-4 border-black">
+    <div class="max-w-7xl mx-auto px-6 py-16 md:py-24">
+      <div class="grid lg:grid-cols-[1.1fr_0.9fr] gap-10 items-start">
+        <div>
+          <p class="font-extrabold uppercase tracking-[0.16em] text-sm md:text-base">The problem</p>
+          <h2 class="font-display mt-4 text-4xl md:text-6xl lg:text-7xl leading-[0.95] font-black uppercase">
+            Great products get <span class="text-[#FE2C55]">ignored</span> when the video feels flat
+          </h2>
+        </div>
+        <div class="space-y-4 text-lg md:text-xl font-semibold leading-snug">
+          <p>People do not wait around for brands to warm up. If your first second is slow, they are gone.</p>
+          <p>Polished ads that feel stiff get skipped. Overwritten scripts get tuned out. Safe creative disappears in the feed.</p>
+          <p>You need sharp hooks, creator energy, and clear calls to action that move like TikTok, not like a boardroom deck.</p>
         </div>
       </div>
-    </section>
-
-    <section class="px-6 py-16" style="background:#000000;">
-      <div class="mx-auto max-w-5xl text-center">
-        <h2 class="text-3xl md:text-4xl font-bold" style="color:#FFFFFF;">Proof: Real Results for Creators & Businesses</h2>
-        <div class="mt-8 grid gap-6 md:grid-cols-3">
-          
-            <div class="rounded-2xl p-8" style="background:#FE2C55;">
-              <p class="text-2xl font-extrabold" style="color:#FFFFFF;">[object Object]</p>
-            </div>
-            <div class="rounded-2xl p-8" style="background:#FE2C55;">
-              <p class="text-2xl font-extrabold" style="color:#FFFFFF;">[object Object]</p>
-            </div>
-            <div class="rounded-2xl p-8" style="background:#FE2C55;">
-              <p class="text-2xl font-extrabold" style="color:#FFFFFF;">[object Object]</p>
-            </div>
+      <div class="grid md:grid-cols-3 gap-5 mt-12">
+        <div class="bg-black text-white p-6">
+          <p class="text-sm font-extrabold uppercase tracking-[0.14em] text-[#25F4EE]">Too slow</p>
+          <p class="mt-3 text-2xl font-black uppercase leading-tight">Long intros kill momentum before your message lands.</p>
         </div>
-      </div>
-    </section>
-
-    <section id="cta" class="px-6 py-24 text-center" style="background:#25F4EE;">
-      <div class="mx-auto max-w-3xl">
-        <h2 class="text-4xl md:text-5xl font-extrabold" style="color:#000000;">Ready to Take Your TikTok Presence to the Next Level?</h2>
-        <a href="#" class="mt-8 inline-block rounded-full px-10 py-4 text-lg font-bold"
-           style="background:#000000;color:#FFFFFF;">[object Object]</a>
-      </div>
-    </section>
-  
-
-  <!-- FOOTER -->
-  <footer class="border-t border-white/10 mt-10">
-    <div class="mx-auto max-w-6xl px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-6">
-      <div class="flex items-center gap-2 opacity-90"><svg viewBox="0 0 180 48" width="160" height="42" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="TikTok">
-  <g>
-    <!-- note glyph: cyan offset layer -->
-    <path d="M30.5 6.2c1.3 4.4 4.6 7.9 9 9.1v6.6c-2.7-.1-5.3-.9-7.6-2.3v10.6c0 7.2-5.8 13-13 13-2.7 0-5.2-.8-7.3-2.2 2.4 2.6 5.9 4.2 9.7 4.2 7.2 0 13-5.8 13-13V21.4c2.3 1.4 4.9 2.2 7.6 2.3v-6.6c-4.4-1.2-7.7-4.7-9-9.1h-2.4z" fill="#25F4EE"/>
-    <!-- note glyph: red offset layer -->
-    <path d="M27.5 6.2c1.3 4.4 4.6 7.9 9 9.1v6.6c-2.7-.1-5.3-.9-7.6-2.3v10.6c0 7.2-5.8 13-13 13S2.9 37.4 2.9 30.2 8.7 17.2 15.9 17.2c.6 0 1.2 0 1.8.1v6.8c-.6-.2-1.2-.3-1.8-.3-3.4 0-6.2 2.8-6.2 6.2s2.8 6.2 6.2 6.2 6.2-2.8 6.2-6.2V6.2h5.4z" fill="#FE2C55"/>
-    <!-- note glyph: white top layer -->
-    <path d="M29 6.2c1.3 4.4 4.6 7.9 9 9.1v6.6c-2.7-.1-5.3-.9-7.6-2.3v10.6c0 7.2-5.8 13-13 13S4.4 37.4 4.4 30.2 10.2 17.2 17.4 17.2c.6 0 1.2 0 1.8.1v6.8c-.6-.2-1.2-.3-1.8-.3-3.4 0-6.2 2.8-6.2 6.2s2.8 6.2 6.2 6.2 6.2-2.8 6.2-6.2V6.2H29z" fill="#FFFFFF"/>
-  </g>
-  <!-- wordmark -->
-  <g fill="#FFFFFF">
-    <text x="54" y="33" font-family="Inter, system-ui, sans-serif" font-size="26" font-weight="800" letter-spacing="-1">TikTok</text>
-  </g>
-</svg></div>
-      <p class="text-sm text-white/50 font-medium">&copy; 2026 TikTok for Business. Demo site generated by TasteLoop.</p>
-      <div class="flex gap-5 text-sm font-semibold text-white/60">
-        <a href="#" class="hover:text-white">Privacy</a>
-        <a href="#" class="hover:text-white">Terms</a>
-        <a href="#" class="hover:text-white">Contact</a>
+        <div class="bg-[#FE2C55] text-white p-6">
+          <p class="text-sm font-extrabold uppercase tracking-[0.14em]">Too polished</p>
+          <p class="mt-3 text-2xl font-black uppercase leading-tight">Perfect-looking ads can feel fake fast.</p>
+        </div>
+        <div class="bg-white text-black p-6">
+          <p class="text-sm font-extrabold uppercase tracking-[0.14em]">Too vague</p>
+          <p class="mt-3 text-2xl font-black uppercase leading-tight">Views mean nothing if nobody knows what to do next.</p>
+        </div>
       </div>
     </div>
-  </footer>
+  </section>
 
+  <section id="how-it-works" class="bg-black text-white border-b-4 border-[#25F4EE]">
+    <div class="max-w-7xl mx-auto px-6 py-16 md:py-24">
+      <div class="max-w-4xl">
+        <p class="font-extrabold uppercase tracking-[0.16em] text-sm md:text-base text-[#25F4EE]">How it works</p>
+        <h2 class="font-display mt-4 text-4xl md:text-6xl lg:text-7xl leading-[0.95] font-black uppercase">
+          Make every second <span class="text-[#FE2C55]">pull</span> its weight
+        </h2>
+      </div>
+      <div class="grid md:grid-cols-3 gap-6 mt-12">
+        <div class="bg-white text-black p-7">
+          <div class="w-14 h-14 bg-[#FE2C55] text-white flex items-center justify-center font-black text-2xl">1</div>
+          <h3 class="mt-6 text-3xl font-black uppercase leading-tight">Hook hard</h3>
+          <p class="mt-4 text-lg font-medium leading-snug">Lead with a moment people feel, want, or need. Start with the payoff, the surprise, or the problem they know too well.</p>
+        </div>
+        <div class="bg-[#FE2C55] text-white p-7">
+          <div class="w-14 h-14 bg-black text-white flex items-center justify-center font-black text-2xl">2</div>
+          <h3 class="mt-6 text-3xl font-black uppercase leading-tight">Show the shift</h3>
+          <p class="mt-4 text-lg font-medium leading-snug">Move fast from pain to transformation. Real use, real personality, real reasons your audience should care right now.</p>
+        </div>
+        <div class="bg-[#25F4EE] text-black p-7">
+          <div class="w-14 h-14 bg-black text-white flex items-center justify-center font-black text-2xl">3</div>
+          <h3 class="mt-6 text-3xl font-black uppercase leading-tight">Ask for action</h3>
+          <p class="mt-4 text-lg font-medium leading-snug">Tell people exactly where to go next. Shop it, book it, try it, follow it. Clean CTA. Zero guesswork.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="proof" class="bg-[#FE2C55] text-white border-b-4 border-black">
+    <div class="max-w-7xl mx-auto px-6 py-16 md:py-24">
+      <div class="grid lg:grid-cols-[0.95fr_1.05fr] gap-10 items-start">
+        <div>
+          <p class="font-extrabold uppercase tracking-[0.16em] text-sm md:text-base">Proof</p>
+          <h2 class="font-display mt-4 text-4xl md:text-6xl lg:text-7xl leading-[0.95] font-black uppercase">
+            When creative hits, <span class="text-[#25F4EE]">people move</span>
+          </h2>
+          <p class="mt-6 text-lg md:text-2xl font-medium leading-snug">The best TikTok videos do not talk at people. They pull them in, make the product feel alive, and give them a reason to act now.</p>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-5">
+          <div class="bg-black p-6">
+            <p class="text-sm uppercase tracking-[0.14em] font-extrabold text-[#25F4EE]">More clicks</p>
+            <p class="mt-3 text-5xl md:text-6xl font-black">3.1x</p>
+            <p class="mt-3 text-lg font-semibold leading-snug">Short, creator-style product demos can drive stronger click intent than static promo posts.</p>
+          </div>
+          <div class="bg-white text-black p-6">
+            <p class="text-sm uppercase tracking-[0.14em] font-extrabold">Stronger watch time</p>
+            <p class="mt-3 text-5xl md:text-6xl font-black">58s</p>
+            <p class="mt-3 text-lg font-semibold leading-snug">Fast hooks and clear pacing keep viewers with you long enough to care about the offer.</p>
+          </div>
+          <div class="bg-[#25F4EE] text-black p-6 sm:col-span-2">
+            <p class="text-sm uppercase tracking-[0.14em] font-extrabold">What winning brands do</p>
+            <p class="mt-3 text-2xl md:text-3xl font-black uppercase leading-tight">They act like creators, speak like humans, and sell without sounding salesy.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="cta" class="bg-black text-white">
+    <div class="max-w-7xl mx-auto px-6 py-16 md:py-24">
+      <div class="bg-[#25F4EE] text-black p-8 md:p-12 lg:p-16">
+        <div class="grid lg:grid-cols-[1.2fr_0.8fr] gap-8 items-center">
+          <div>
+            <p class="font-extrabold uppercase tracking-[0.16em] text-sm md:text-base">Call to action</p>
+            <h2 class="font-display mt-4 text-4xl md:text-6xl lg:text-7xl leading-[0.95] font-black uppercase">
+              Your next <span class="text-[#FE2C55]">customer</span> is already scrolling
+            </h2>
+            <p class="mt-6 text-lg md:text-2xl font-semibold leading-snug max-w-3xl">
+              Make the 60 seconds count. Build videos that feel native, hit fast, and turn attention into action.
+            </p>
+          </div>
+          <div class="flex flex-col gap-4">
+            <a href="#" class="bg-[#FE2C55] text-white px-7 py-5 text-center text-base md:text-lg font-extrabold uppercase tracking-wide">Create Your Campaign</a>
+            <a href="#" class="bg-black text-white px-7 py-5 text-center text-base md:text-lg font-extrabold uppercase tracking-wide">Get Inspired on TikTok</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 </body>
 </html>

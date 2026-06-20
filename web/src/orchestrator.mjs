@@ -1,13 +1,34 @@
-// orchestrator.mjs — TasteLoop two-page run.
-// Builds a TikTok marketing site once per generation by ACTUALLY calling Ollama.
-// MEMORY page learns (writes traces, recalls, distills lessons, upskills) and fixes
-// brand flaws; NO-MEMORY page skips all of that and leaves the flaw in place.
+// orchestrator.mjs — TasteLoop two-page run (REAL, no site-generation fallback).
 //
-// Imports the frozen module signatures (built in parallel). Do not change them.
+// Each generation runs a REAL master step: it asks Ollama (fast) to DECIDE the
+// roster + a one-line strategy from the goal + brand, then spawns exactly those
+// agents. The visual-designer + frontend-implementer step calls CODEX
+// (codexBuildSite) to actually BUILD the full page HTML — there is NO template
+// fallback; if Codex fails we retry once and otherwise surface the error.
+//
+// MEMORY page recalls REAL Cognee lessons (recallLessons / recallInRun), passes
+// the recalled lesson text into Codex so the page is built better, writes traces
+// from the critique findings, and distills lessons at gen end. The NO-MEMORY
+// page passes lesson=null and does none of that.
+//
+// Critique runs via Ollama (findings). The judge combines a DETERMINISTIC
+// brand-lint (a real gradient/violation in the produced HTML costs ~25 pts) with
+// an Ollama score, so the memory page — which applied the no-gradient lesson —
+// earns a higher, honest score.
+//
+// Frozen imports (do not change their signatures):
 import { chat, chatJSON } from "./ollama.mjs";
-import { baseTemplate, heroSVG, TIKTOK_LOGO_SVG } from "./assets.mjs";
+import { codexBuildSite } from "./codex.mjs";
 
-const ROSTER = [
+// ---- constants -----------------------------------------------------------
+
+// The product the studios are marketing. Passed straight into Codex.
+export const GOAL =
+  "TikTok for Business — turn 60-second videos into customers";
+
+// The minimum roster the master MUST field. The master may ADD specialists
+// (typographer / info-architect / image-sourcer) but never drop these.
+const REQUIRED_ROLES = [
   "brand-deconstruct",
   "copywriter",
   "visual-designer",
@@ -15,17 +36,16 @@ const ROSTER = [
   "critique",
 ];
 
+// Specialists the master is allowed to add on top of the required roster.
+const OPTIONAL_ROLES = ["typographer", "info-architect", "image-sourcer"];
+
+const TURN_CAP = 20;
+
 // ---- small helpers -------------------------------------------------------
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-function slug(s) {
-  return String(s).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-}
-
-// Detect an obvious brand violation in generated HTML (e.g. a gradient, which the
-// brand explicitly forbids). Returns a finding string or null.
-function detectBrandFlaw(html, brand) {
+// Detect an obvious brand violation in generated HTML (e.g. a gradient, which
+// the brand explicitly forbids). Returns a finding string or null.
+export function detectBrandFlaw(html, brand) {
   const dont = (brand?.dont || []).map((d) => String(d).toLowerCase());
   const h = String(html || "").toLowerCase();
   if (h.includes("gradient") || h.includes("linear-gradient") || h.includes("bg-gradient")) {
@@ -37,103 +57,71 @@ function detectBrandFlaw(html, brand) {
   return null;
 }
 
-// Build a complete on-brand HTML page from copy. `injectFlaw` forces a gradient
-// hero (a known brand violation) so the critique always has something to catch.
-function buildHtml({ brand, copy, injectFlaw }) {
-  const c = brand.colors;
-  const hero = copy.hero || "Reach a billion creators";
-  const sub = copy.sub || "Launch campaigns that actually convert.";
-  const cta = copy.cta || "Get started";
+// ---- REAL master step ----------------------------------------------------
 
-  const heroBg = injectFlaw
-    ? `style="background:linear-gradient(135deg, ${c.primary}, ${c.accent});"`
-    : `style="background:${c.bg};"`;
-
-  const sectionsHtml = `
-    <section class="px-6 py-20 text-center" ${heroBg}>
-      <div class="mx-auto max-w-4xl">
-        <div class="mb-6 flex justify-center">${heroSVG ? heroSVG(brand) : ""}</div>
-        <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight" style="color:${c.fg};">${hero}</h1>
-        <p class="mt-6 text-xl md:text-2xl" style="color:${c.fg};opacity:.85;">${sub}</p>
-        <a href="#cta" class="mt-10 inline-block rounded-full px-8 py-4 text-lg font-bold"
-           style="background:${c.primary};color:${c.fg};">${cta}</a>
-      </div>
-    </section>
-
-    <section class="px-6 py-16" style="background:${c.bg};">
-      <div class="mx-auto max-w-5xl">
-        <h2 class="text-3xl md:text-4xl font-bold" style="color:${c.fg};">${copy.problemTitle || "The problem"}</h2>
-        <p class="mt-4 text-lg" style="color:${c.fg};opacity:.8;">${copy.problem || "Marketing on social is noisy and hard to measure."}</p>
-      </div>
-    </section>
-
-    <section class="px-6 py-16" style="background:${c.primary};">
-      <div class="mx-auto max-w-5xl">
-        <h2 class="text-3xl md:text-4xl font-bold" style="color:${c.fg};">${copy.howTitle || "How it works"}</h2>
-        <div class="mt-8 grid gap-6 md:grid-cols-3">
-          ${(copy.howSteps || ["Plan", "Create", "Measure"]).map((step, i) => `
-            <div class="rounded-2xl p-6" style="background:${c.bg};">
-              <div class="text-4xl font-extrabold" style="color:${c.accent};">${i + 1}</div>
-              <p class="mt-3 text-lg font-semibold" style="color:${c.fg};">${step}</p>
-            </div>`).join("")}
-        </div>
-      </div>
-    </section>
-
-    <section class="px-6 py-16" style="background:${c.bg};">
-      <div class="mx-auto max-w-5xl text-center">
-        <h2 class="text-3xl md:text-4xl font-bold" style="color:${c.fg};">${copy.proofTitle || "Proof"}</h2>
-        <div class="mt-8 grid gap-6 md:grid-cols-3">
-          ${(copy.proofStats || ["1B+ users", "4.5x ROAS", "10k brands"]).map((p) => `
-            <div class="rounded-2xl p-8" style="background:${c.primary};">
-              <p class="text-2xl font-extrabold" style="color:${c.fg};">${p}</p>
-            </div>`).join("")}
-        </div>
-      </div>
-    </section>
-
-    <section id="cta" class="px-6 py-24 text-center" style="background:${c.accent};">
-      <div class="mx-auto max-w-3xl">
-        <h2 class="text-4xl md:text-5xl font-extrabold" style="color:${c.bg};">${copy.ctaTitle || "Start creating today"}</h2>
-        <a href="#" class="mt-8 inline-block rounded-full px-10 py-4 text-lg font-bold"
-           style="background:${c.bg};color:${c.fg};">${cta}</a>
-      </div>
-    </section>
-  `;
-
-  return baseTemplate({ brand, title: hero, sectionsHtml });
-}
-
-// ---- LLM steps -----------------------------------------------------------
-
-async function genCopy(brand, { upskilled, lessons }) {
-  const lessonsNote = lessons && lessons.length
-    ? `Apply these learned lessons: ${lessons.map((l) => l.statement).join("; ")}.`
+/**
+ * Ask Ollama (fast) to plan this generation: pick the roster (a subset/superset
+ * of the required roles + allowed specialists) and a one-line strategy from the
+ * goal + brand. Returns { roster:string[], strategy:string }. Falls back to the
+ * required roster ONLY if the model call/parse fails — the PLAN itself is a real
+ * model call, this is not a hardcoded plan masquerading as one.
+ */
+export async function masterPlan({ brand, goal, isMemory, lessons }) {
+  const lessonNote = (lessons && lessons.length)
+    ? `You recall ${lessons.length} learned lesson(s) from memory: ${lessons.map((l) => l.statement).join("; ")}. Factor them into the strategy.`
     : "";
   const messages = [
     {
       role: "system",
       content:
-        "You are a senior TikTok-brand copywriter. Voice: bold, energetic, direct. " +
-        "Return ONLY JSON for a 5-section marketing landing page (hero, problem, how-it-works, proof, cta).",
+        "You are the MASTER agent leading a TikTok marketing-site studio. " +
+        "Decide the agent roster and a one-line build strategy. " +
+        'Return ONLY JSON: {"roster":[string,...],"strategy":string}. ' +
+        `The roster MUST include all of: ${JSON.stringify(REQUIRED_ROLES)}. ` +
+        `You MAY add any of these specialists if they help: ${JSON.stringify(OPTIONAL_ROLES)}. ` +
+        "Use only role names from those two lists.",
     },
     {
       role: "user",
       content:
-        `Brand: ${JSON.stringify({ tone: brand.tone, audience: brand.audience, do: brand.do })}. ` +
-        (upskilled ? "You are an upskilled v2 designer; be sharper than last time. " : "") +
-        lessonsNote +
-        ` Return JSON with keys: hero, sub, cta, problemTitle, problem, howTitle, howSteps(array of 3), ` +
-        `proofTitle, proofStats(array of 3), ctaTitle.`,
+        `GOAL: ${goal}\n` +
+        `BRAND tone: ${JSON.stringify(brand.tone)}; audience: ${brand.audience}; ` +
+        `DON'Ts: ${JSON.stringify(brand.dont)}.\n` +
+        (isMemory ? "This studio HAS memory of prior runs. " : "This studio has NO memory. ") +
+        lessonNote +
+        " Plan the roster and a single concrete strategy line.",
     },
   ];
+
+  let roster = [...REQUIRED_ROLES];
+  let strategy = isMemory
+    ? "Apply learned brand lessons and ship a flat, on-brand high-converting page."
+    : "Ship a bold, on-brand high-converting TikTok marketing page.";
+
   try {
-    const obj = await chatJSON(messages, { temperature: 0.7 });
-    return obj && typeof obj === "object" ? obj : {};
+    const obj = await chatJSON(messages, { temperature: 0.4 });
+    if (obj && typeof obj === "object") {
+      if (Array.isArray(obj.roster)) {
+        const allowed = new Set([...REQUIRED_ROLES, ...OPTIONAL_ROLES]);
+        // keep model-chosen roles that are allowed, in model order, deduped
+        const chosen = [];
+        for (const r of obj.roster) {
+          const role = String(r || "").trim();
+          if (allowed.has(role) && !chosen.includes(role)) chosen.push(role);
+        }
+        // guarantee every required role is present (append any the model dropped)
+        for (const r of REQUIRED_ROLES) if (!chosen.includes(r)) chosen.push(r);
+        if (chosen.length) roster = chosen;
+      }
+      if (obj.strategy && String(obj.strategy).trim()) strategy = String(obj.strategy).trim();
+    }
   } catch {
-    return {}; // buildHtml has sane fallbacks
+    /* keep the required roster + default strategy */
   }
+  return { roster, strategy };
 }
+
+// ---- LLM critique + judge ------------------------------------------------
 
 async function genCritique(brand, html, knownFlaw) {
   const messages = [
@@ -147,7 +135,7 @@ async function genCritique(brand, html, knownFlaw) {
       role: "user",
       content:
         `Brand DONTs: ${JSON.stringify(brand.dont)}. ` +
-        `Review this page and list 1-4 findings. HTML excerpt: ${String(html).slice(0, 1200)}`,
+        `Review this page and list 1-4 findings. HTML excerpt: ${String(html).slice(0, 1400)}`,
     },
   ];
   let findings = [];
@@ -157,45 +145,73 @@ async function genCritique(brand, html, knownFlaw) {
   } catch {
     findings = [];
   }
-  // Force at least one finding about the real brand violation if present.
+  // Surface the real brand violation if one is present in the artifact.
   if (knownFlaw && !findings.some((f) => /gradient/i.test(f))) findings.unshift(knownFlaw);
   if (findings.length === 0) findings.push("Visual hierarchy could be stronger; emphasize the primary CTA.");
   return findings;
 }
 
-async function genJudge(brand, html, { biasUp }) {
+// Honest judge: a real brand violation in the produced HTML costs real points,
+// PLUS an Ollama score. The memory page (which applied the no-gradient lesson and
+// built a flat page via Codex) earns a higher, honest score.
+async function genJudge(brand, html) {
   const messages = [
     {
       role: "system",
       content:
-        "You are a design judge. Score a TikTok marketing landing page 0-100 and give a category. " +
-        "Return ONLY JSON: {\"score\":<int 0-100>, \"category\":<string>}.",
+        "You are a strict design judge for a TikTok marketing landing page. " +
+        "Score it 0-100 against the brand rules and return ONLY JSON: " +
+        "{\"score\":<int 0-100>, \"category\":<string>}.",
     },
     {
       role: "user",
       content:
-        `Brand tone: ${JSON.stringify(brand.tone)}. Page HTML excerpt: ${String(html).slice(0, 1000)}. ` +
-        `Categories: weak | decent | strong | excellent.`,
+        `Brand tone: ${JSON.stringify(brand.tone)}. ` +
+        `Brand DON'Ts — penalize ANY violation heavily: ${JSON.stringify(brand.dont)}. ` +
+        `Reserve 90+ for flawless on-brand pages; a page that violates a DON'T (e.g. any gradient) must score below 70. ` +
+        `Page HTML excerpt: ${String(html).slice(0, 1600)}.`,
     },
   ];
   let score = 60;
   let category = "decent";
   try {
-    const obj = await chatJSON(messages, { temperature: 0.3 });
+    const obj = await chatJSON(messages, { temperature: 0.2 });
     if (obj && typeof obj === "object") {
-      if (Number.isFinite(Number(obj.score))) score = Math.max(0, Math.min(100, Math.round(Number(obj.score))));
+      if (Number.isFinite(Number(obj.score))) score = Math.max(0, Math.min(96, Math.round(Number(obj.score))));
       if (obj.category) category = String(obj.category);
     }
   } catch {
     /* keep defaults */
   }
-  // Bias so the memory page (which fixes flaws + improves over gens) ends higher.
-  score = biasUp ? Math.min(100, score + 18) : Math.max(0, score - 6);
+  // DETERMINISTIC brand lint: a real violation in the actual artifact costs points.
+  if (detectBrandFlaw(html, brand)) score = Math.max(0, score - 25);
   if (score >= 85) category = "excellent";
   else if (score >= 70) category = "strong";
   else if (score >= 55) category = "decent";
   else category = "weak";
   return { score, category };
+}
+
+// ---- Codex build (with one retry; NO template fallback) ------------------
+
+// Build the page HTML with Codex. codexBuildSite already retries the codex turn
+// once internally and throws on failure (no fallback). We add ONE additional
+// build-level retry so a transient Codex hiccup doesn't abort the run, then let
+// the error surface. We NEVER substitute a template.
+async function buildSiteWithRetry({ brand, goal, copyHint, lesson }) {
+  let firstErr;
+  try {
+    return await codexBuildSite({ brand, goal, copyHint, lesson });
+  } catch (err) {
+    firstErr = err;
+  }
+  try {
+    return await codexBuildSite({ brand, goal, copyHint, lesson });
+  } catch (err) {
+    throw new Error(
+      `codexBuildSite failed twice (no fallback allowed).\n  attempt#1: ${firstErr?.message || firstErr}\n  attempt#2: ${err?.message || err}`
+    );
+  }
 }
 
 // ---- main export ---------------------------------------------------------
@@ -207,10 +223,11 @@ async function genJudge(brand, html, { biasUp }) {
  * @param {number} a.gens
  * @param {Object} a.memory   memory backend from makeMemory(kind)
  * @param {Object} a.brand    BrandSpec from deconstructBrand()
- * @param {Function} a.emit   emit(event) — pushes a partial event (page/gen/t filled by caller)
- * @param {string} a.snapDir  absolute dir for HTML snapshots (relative htmlRef from web/run/)
+ * @param {Function} a.emit   emit(event) — caller fills page/gen/t
+ * @param {string} a.snapDir  absolute dir for HTML snapshots (htmlRef relative to web/run/)
+ * @param {string} [a.goal]   product goal string passed into Codex
  */
-export async function runPage({ page, gens, memory, brand, emit, snapDir }) {
+export async function runPage({ page, gens, memory, brand, emit, snapDir, goal = GOAL }) {
   const isMemory = page === "memory";
   const sessionId = `${page}-run`;
   const fs = await import("node:fs/promises");
@@ -219,20 +236,17 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir }) {
   await memory.openSession(sessionId);
 
   let turns = 0;
-  const TURN_CAP = 20;
   let bestScore = 0;
-  let lastLessons = []; // lessons recalled at the start of a gen (drive upskilling)
 
-  // counters mirrored locally just for run.finished totals
+  // counters mirrored locally for the run.finished totals
   let agentsSpawned = 0;
   let tracesCount = 0;
   let improvements = 0;
   let lessonsCount = 0;
 
-  const spawn = (role, version) => {
+  const spawn = (role, version, gen, suffix = "") => {
     agentsSpawned += 1;
-    const agentId = `${page}-${role}-v${version}-g`;
-    return agentId;
+    return `${page}-${role}-v${version}-g${gen}${suffix}`;
   };
 
   const turn = (agentId) => {
@@ -245,84 +259,142 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir }) {
   emit({ type: "run.started" });
 
   for (let gen = 0; gen < gens; gen++) {
-    emit({ type: "master.planned", roster: ROSTER });
-
-    // --- MEMORY: recall lessons from prior gens -> upskill the visual designer ---
-    let designerVersion = 1;
-    let upskilled = false;
+    // --- MEMORY: recall lessons from prior gens BEFORE planning, so the master
+    //     and the builder can both use them. NO-MEMORY recalls nothing.
+    let lessons = [];
     if (isMemory && gen > 0) {
       try {
-        lastLessons = (await memory.recallLessons("brand design quality")) || [];
+        lessons = (await memory.recallLessons("brand design quality gradient")) || [];
       } catch {
-        lastLessons = [];
-      }
-      if (lastLessons.length) {
-        designerVersion = 2;
-        upskilled = true;
-        improvements += 1;
-        emit({ type: "member.upskilled", role: "visual-designer", version: 2 });
+        lessons = [];
       }
     }
 
-    // --- brand-deconstruct agent (instant; brand already provided) ---
-    {
-      const id = spawn("brand-deconstruct", 1) + gen;
-      emit({ type: "agent.spawned", agentId: id, role: "brand-deconstruct", version: 1 });
+    // Upskill the visual designer when we actually have lessons to apply.
+    let designerVersion = 1;
+    let upskilled = false;
+    if (isMemory && lessons.length) {
+      designerVersion = 2;
+      upskilled = true;
+      improvements += 1;
+      emit({ type: "member.upskilled", role: "visual-designer", version: 2 });
+    }
+
+    // --- REAL MASTER STEP: decide roster + strategy via Ollama ---
+    const { roster, strategy } = await masterPlan({ brand, goal, isMemory, lessons });
+    emit({ type: "master.planned", roster, strategy });
+
+    // The single lesson text we pass into Codex (memory only). Prefer a
+    // gradient-related lesson if one was learned (that's the demo's headline win).
+    const lessonText = isMemory && lessons.length
+      ? (lessons.find((l) => /gradient/i.test(l.statement || "")) || lessons[0]).statement
+      : null;
+
+    // Spawn exactly the roster the master chose. Roles do real work below; the
+    // others are spawned + take a status turn so the roster the master decided is
+    // visibly fielded.
+    const spawned = new Map(); // role -> agentId
+    for (const role of roster) {
+      const version = role === "visual-designer" ? designerVersion : 1;
+      const id = spawn(role, version, gen);
+      spawned.set(role, id);
+      emit({ type: "agent.spawned", agentId: id, role, version });
+    }
+
+    // --- brand-deconstruct (brand already provided; instant) ---
+    if (spawned.has("brand-deconstruct")) {
+      const id = spawned.get("brand-deconstruct");
       emit({ type: "agent.status", agentId: id, doing: "loading TikTok BrandSpec" });
       turn(id);
     }
 
-    // --- copywriter agent ---
-    let copy = {};
-    {
-      const id = spawn("copywriter", 1) + gen;
-      emit({ type: "agent.spawned", agentId: id, role: "copywriter", version: 1 });
-      emit({ type: "agent.status", agentId: id, doing: "writing 5-section TikTok copy" });
+    // --- optional specialists take a working turn so the plan is real ---
+    for (const role of OPTIONAL_ROLES) {
+      if (!spawned.has(role)) continue;
+      const id = spawned.get(role);
+      const doing =
+        role === "typographer" ? "tuning type scale to the brand font"
+        : role === "info-architect" ? "ordering the 5 sections for conversion"
+        : "selecting on-brand imagery (no generic AI stock)";
+      emit({ type: "agent.status", agentId: id, doing });
       turn(id);
-      copy = await genCopy(brand, { upskilled, lessons: lastLessons });
     }
 
-    // --- visual-designer + frontend-implementer: produce the page HTML ---
-    // We inject a brand flaw (gradient hero) so critique always has a real target.
-    // On the FIRST gen both pages have the flaw. The memory page will fix it on revise.
+    // --- copywriter: a copy direction hint for Codex ---
+    let copyHint = strategy;
+    if (spawned.has("copywriter")) {
+      const cid = spawned.get("copywriter");
+      emit({ type: "agent.status", agentId: cid, doing: "writing bold 5-section TikTok copy direction" });
+      turn(cid);
+      try {
+        const obj = await chatJSON(
+          [
+            {
+              role: "system",
+              content:
+                "You are a senior TikTok-brand copywriter. Voice: bold, energetic, direct. " +
+                'Return ONLY JSON: {"hero":string,"angle":string}. hero = a punchy hero headline; ' +
+                "angle = a one-line copy direction for the whole page.",
+            },
+            {
+              role: "user",
+              content:
+                `GOAL: ${goal}. Brand tone: ${JSON.stringify(brand.tone)}; audience: ${brand.audience}. ` +
+                (lessonText ? `Apply learned lesson: ${lessonText}. ` : "") +
+                "Give a hero headline and a page-wide copy angle.",
+            },
+          ],
+          { temperature: 0.7 }
+        );
+        const hero = obj && typeof obj === "object" ? String(obj.hero || "").trim() : "";
+        const angle = obj && typeof obj === "object" ? String(obj.angle || "").trim() : "";
+        const parts = [];
+        if (hero) parts.push(`Hero headline tone: "${hero}"`);
+        if (angle) parts.push(angle);
+        if (parts.length) copyHint = parts.join(". ");
+      } catch {
+        copyHint = strategy; // keep the master's strategy as the hint
+      }
+    }
+
+    // --- visual-designer + frontend-implementer: BUILD the page with CODEX ---
     let seq = 0;
     let html = "";
     let htmlRef = "";
-    let injectFlaw = true;
     {
-      const vid = spawn("visual-designer", designerVersion) + gen;
-      emit({ type: "agent.spawned", agentId: vid, role: "visual-designer", version: designerVersion });
-      emit({ type: "agent.status", agentId: vid, doing: upskilled ? "applying learned lessons (v2)" : "composing on-brand layout" });
-      turn(vid);
-
-      const fid = spawn("frontend-implementer", 1) + gen;
-      emit({ type: "agent.spawned", agentId: fid, role: "frontend-implementer", version: 1 });
-      emit({ type: "agent.status", agentId: fid, doing: "rendering self-contained HTML+Tailwind" });
-      turn(fid);
-
-      // Upskilled memory designer learned not to use gradients -> avoid flaw from the start.
-      if (isMemory && upskilled) injectFlaw = false;
+      const vid = spawned.get("visual-designer");
+      if (vid) {
+        emit({ type: "agent.status", agentId: vid, doing: upskilled ? "applying learned lessons (v2)" : "directing on-brand layout" });
+        turn(vid);
+      }
+      const fid = spawned.get("frontend-implementer");
+      if (fid) {
+        emit({ type: "agent.status", agentId: fid, doing: "building full HTML with Codex (gpt-5.4 medium)" });
+        turn(fid);
+      }
 
       seq += 1;
-      html = buildHtml({ brand, copy, injectFlaw });
-      htmlRef = path.posix.join("snapshots", `${page}-g${gen}-s${seq}.html`);
-      await fs.writeFile(path.join(snapDir, `${page}-g${gen}-s${seq}.html`), html, "utf8");
+      // REAL build via Codex — NO template fallback. Memory passes lessonText.
+      html = await buildSiteWithRetry({ brand, goal, copyHint, lesson: lessonText });
+      const fileName = `${page}-g${gen}-s${seq}.html`;
+      htmlRef = path.posix.join("snapshots", fileName);
+      await fs.writeFile(path.join(snapDir, fileName), html, "utf8");
       emit({ type: "design.rendered", htmlRef });
     }
 
-    // --- critique agent ---
+    // --- critique (via Ollama) ---
     const knownFlaw = detectBrandFlaw(html, brand);
     let findings = [];
-    {
-      const id = spawn("critique", 1) + gen;
-      emit({ type: "agent.spawned", agentId: id, role: "critique", version: 1 });
+    if (spawned.has("critique")) {
+      const id = spawned.get("critique");
       emit({ type: "agent.status", agentId: id, doing: "auditing against brand rules" });
       turn(id);
       findings = await genCritique(brand, html, knownFlaw);
       emit({ type: "critique.made", findings });
     }
 
-    // --- MEMORY ONLY: write traces, recall, revise & fix the flaw ---
+    // --- MEMORY ONLY: write traces, recall, and (if a flaw slipped through)
+    //     rebuild with the lesson re-asserted. NO-MEMORY does none of this. ---
     if (isMemory) {
       for (const finding of findings) {
         const severity = /gradient|forbid|violat/i.test(finding) ? "high" : "medium";
@@ -335,8 +407,8 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir }) {
         }
       }
 
-      // revise turn: recall what we just learned, then regenerate fixing the flaw
-      const reviseId = spawn("visual-designer", designerVersion) + gen + "-revise";
+      // revise turn: recall what we just learned within the run
+      const reviseId = spawn("visual-designer", designerVersion, gen, "-revise");
       emit({ type: "agent.spawned", agentId: reviseId, role: "visual-designer", version: designerVersion });
       emit({ type: "agent.status", agentId: reviseId, doing: "recalling traces to fix flaws" });
       turn(reviseId);
@@ -350,23 +422,29 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir }) {
       }
       emit({ type: "memory.recalled", agentId: reviseId, hits });
 
-      if (knownFlaw || injectFlaw) {
+      // If Codex still produced a brand flaw, REBUILD with the no-gradient lesson
+      // re-asserted (still a real Codex build, never a template).
+      if (knownFlaw) {
+        const fixLesson =
+          (lessonText && /gradient/i.test(lessonText) ? lessonText : null) ||
+          "Never use gradients anywhere; use only flat brand-color blocks (the brand forbids gradients).";
         seq += 1;
-        const fixedHtml = buildHtml({ brand, copy, injectFlaw: false });
-        const fixedRef = path.posix.join("snapshots", `${page}-g${gen}-s${seq}.html`);
-        await fs.writeFile(path.join(snapDir, `${page}-g${gen}-s${seq}.html`), fixedHtml, "utf8");
+        const fixedHtml = await buildSiteWithRetry({ brand, goal, copyHint, lesson: fixLesson });
+        const fixedName = `${page}-g${gen}-s${seq}.html`;
+        const fixedRef = path.posix.join("snapshots", fixedName);
+        await fs.writeFile(path.join(snapDir, fixedName), fixedHtml, "utf8");
         html = fixedHtml;
         htmlRef = fixedRef;
         emit({ type: "design.rendered", htmlRef });
       }
     }
-    // NO-MEMORY: intentionally do nothing — flaw stays, nothing learned.
+    // NO-MEMORY: intentionally nothing — no traces, no recall, no revise.
 
     // --- judge ---
     {
-      const id = spawn("critique", 1) + gen + "-judge";
+      const id = spawn("critique", 1, gen, "-judge");
       emit({ type: "agent.status", agentId: id, doing: "scoring the page" });
-      const { score, category } = await genJudge(brand, html, { biasUp: isMemory });
+      const { score, category } = await genJudge(brand, html);
       emit({ type: "team.judged", score, category });
       if (score > bestScore) bestScore = score;
       emit({ type: "score.updated", score: bestScore });
