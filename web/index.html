@@ -68,6 +68,42 @@
     }
     .dot-on { background: #25F4EE; box-shadow: 0 0 10px #25F4EE; }
     iframe { background: #fff; }
+    /* Skill chips */
+    .skill-chip {
+      font-size: 8.5px; line-height: 1; font-weight: 800; letter-spacing: 0.02em;
+      padding: 2px 5px; border-radius: 9999px;
+      background: rgba(37,244,238,0.10); color: #25F4EE;
+      border: 1px solid rgba(37,244,238,0.22);
+      white-space: nowrap;
+    }
+    .skill-chip.tool { background: rgba(254,44,85,0.10); color: #ff7793; border-color: rgba(254,44,85,0.25); }
+    /* Master-authored prompt reveal (expand on click) */
+    .agent-prompt {
+      display: none;
+      margin-top: 4px;
+      font-size: 9px; line-height: 1.35; font-style: italic;
+      color: rgba(255,255,255,0.55);
+      border-top: 1px dashed rgba(255,255,255,0.12);
+      padding-top: 4px;
+      max-height: 7.5em; overflow-y: auto;
+      white-space: pre-wrap;
+    }
+    .agent-card.prompt-open .agent-prompt { display: block; }
+    .agent-card.has-prompt { cursor: pointer; }
+    .prompt-toggle {
+      font-size: 8px; font-weight: 900; letter-spacing: 0.04em;
+      color: rgba(255,255,255,0.30); user-select: none;
+    }
+    .agent-card.has-prompt:hover .prompt-toggle { color: #25F4EE; }
+    /* Strategy banner */
+    .strategy-banner {
+      font-size: 10.5px; line-height: 1.35;
+      color: rgba(255,255,255,0.62);
+    }
+    .strategy-banner .lbl {
+      font-size: 8.5px; font-weight: 900; letter-spacing: 0.12em;
+      text-transform: uppercase; color: rgba(37,244,238,0.8);
+    }
     /* Scrollbar */
     *::-webkit-scrollbar { width: 9px; height: 9px; }
     *::-webkit-scrollbar-thumb { background: #2a2a31; border-radius: 9px; }
@@ -168,10 +204,16 @@
         </div>
       </div>
 
+      <!-- MASTER STRATEGY BANNER (filled from master.planned.strategy) -->
+      <div class="js-strategy strategy-banner hidden px-4 py-2 border-b border-white/10 bg-white/[0.02]">
+        <span class="lbl">Strategy</span>
+        <span class="js-strategy-text align-middle"></span>
+      </div>
+
       <!-- AGENT GRID -->
       <div class="px-4 py-3 border-b border-white/10">
         <div class="flex items-center justify-between mb-2">
-          <div class="text-[10px] uppercase tracking-widest text-white/40 font-bold">Studio</div>
+          <div class="text-[10px] uppercase tracking-widest text-white/40 font-bold">Studio · master-authored team</div>
           <div class="js-doing-global text-[11px] text-white/50 truncate max-w-[60%] text-right"></div>
         </div>
         <div class="js-grid grid grid-cols-5 gap-2"></div>
@@ -192,13 +234,19 @@
 
   <!-- Agent card template -->
   <template id="agentTemplate">
-    <div class="agent-card rounded-lg border border-white/15 bg-white/[0.03] px-2.5 py-2 flex flex-col gap-1 min-w-0">
+    <div class="agent-card rounded-lg border border-white/15 bg-white/[0.03] px-2.5 py-2 flex flex-col gap-1 min-w-0"
+         title="Click to view this agent's master-authored prompt">
       <div class="flex items-center gap-1.5">
         <span class="js-dot dot"></span>
         <span class="js-role text-[11px] font-extrabold tracking-tight truncate"></span>
-        <span class="js-version ml-auto text-[9px] font-bold text-white/40 tabular"></span>
+        <span class="js-prompt-toggle prompt-toggle ml-auto hidden">PROMPT ▸</span>
+        <span class="js-version text-[9px] font-bold text-white/40 tabular ml-1.5"></span>
       </div>
+      <!-- Granted skills/tools from agent.spawned.skills -->
+      <div class="js-skills flex flex-wrap gap-1 hidden"></div>
       <div class="js-doing text-[10px] text-white/50 leading-tight line-clamp-2 min-h-[1.6em]"></div>
+      <!-- Master-authored prompt (agent.spawned.prompt) -->
+      <div class="js-prompt agent-prompt"></div>
     </div>
   </template>
 

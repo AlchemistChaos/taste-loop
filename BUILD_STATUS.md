@@ -5,7 +5,11 @@
 ## MVP goal
 Two studios side-by-side build a TikTok site from `TikTok_guidelines.pdf`. **Page 2 (memory) learns & scores higher; Page 1 (no memory) doesn't.** Web UI replays an event log with live counters (Agents · Turns x/20 · Traces · Improvements · Lessons) + a live `<iframe>` of each site.
 
-## Status — TIER 2 IN PROGRESS (workflow wlljqy6mg)
+## Status — TIER 2.5 v2 IN PROGRESS (workflow wxhw5wrj9, 7 agents)
+**Tier 2 ✅ verified real but thesis FAILED honestly:** real Codex builds (gpt-5.4) + real Cognee (no fallbacks), BUT memory **lost 55 vs 75** — because (a) qwen judge = noise, (b) Codex never makes the gradient mistake so the win-lever never fired.
+**Tier 2.5 v2 fixes both (7 agents):** master authors the full team (count + per-agent prompts + skills) · every agent does real work · **judge = Codex gpt-5.4 HIGH** (no qwen) · honest brand-rule lever (memory recalls a real rule Codex misses → no-memory violates → deterministic penalty → memory wins on merit) · UI shows each agent's prompt+skills. Verify runs end-to-end (~15 min: Codex builds + Codex-high judge are slow).
+
+## (old) Status — TIER 2 (workflow wlljqy6mg)
 **Tier 1 ✅ (honest checkpoint on disk):** real Cognee in loop + deterministic brand-lint → **no-memory 45 vs memory 65** (memory wins on merit: it removed the forbidden gradient; no-memory kept it → −25). 7 real traces, distilled lessons.
 **Tier 2 building (no fallbacks, Codex 5.4-Codex medium):** make-codex-work · real brand-PDF deconstruct · orchestrator rewrite (real master-spawn + Codex-built HTML + injected Cognee lessons) · end-to-end verify. ⚠️ Risk: if `codex exec` can't run non-interactively in this env, there's no fallback by design — the verify agent will report honestly.
 

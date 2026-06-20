@@ -72,6 +72,8 @@
       lessons: $(".js-lessons", node),
       grid: $(".js-grid", node),
       doingGlobal: $(".js-doing-global", node),
+      strategy: $(".js-strategy", node),
+      strategyText: $(".js-strategy-text", node),
       iframe: $(".js-iframe", node),
       iframeEmpty: $(".js-iframe-empty", node),
       agentMap: new Map(),
@@ -112,10 +114,54 @@
     el.classList.add("bump");
   }
 
-  function getOrCreateAgent(page, agentId, role, version) {
+  // Render the granted skills/tools as chips. Tools (palette items that look like
+  // tools/MCP) get a pink chip; skills get a cyan chip. Tolerant of strings or
+  // {name,kind} objects so we work with whatever the master authored.
+  function renderSkills(els, skills) {
+    if (!Array.isArray(skills) || !skills.length) return;
+    const grid = els.skills;
+    grid.innerHTML = "";
+    skills.forEach((s) => {
+      const name = typeof s === "string" ? s : (s && (s.name || s.id)) || "";
+      if (!name) return;
+      const kind = typeof s === "object" && s ? (s.kind || s.type || "") : "";
+      const isTool = /tool|mcp/i.test(kind) || /^(read|write|edit|bash|fetch|search|browse)\b/i.test(name);
+      const chip = document.createElement("span");
+      chip.className = "skill-chip" + (isTool ? " tool" : "");
+      chip.textContent = name;
+      grid.appendChild(chip);
+    });
+    grid.classList.remove("hidden");
+  }
+
+  // Wire/show the master-authored prompt. Clicking the card toggles it open.
+  function renderPrompt(els, prompt) {
+    const text = typeof prompt === "string" ? prompt.trim() : "";
+    if (!text) return;
+    els.prompt.textContent = text;
+    els.promptToggle.classList.remove("hidden");
+    els.card.classList.add("has-prompt");
+    if (!els._promptWired) {
+      els._promptWired = true;
+      els.card.addEventListener("click", () => {
+        const open = els.card.classList.toggle("prompt-open");
+        els.promptToggle.textContent = open ? "PROMPT ▾" : "PROMPT ▸";
+      });
+    }
+  }
+
+  function getOrCreateAgent(page, agentId, role, version, meta) {
     const refs = ui[page];
     let entry = refs.agentMap.get(agentId);
-    if (entry) return entry;
+    if (entry) {
+      // Backfill master-authored metadata if it arrives after the card exists.
+      if (meta) {
+        if (role) entry.role.textContent = role;
+        if (meta.skills && entry.skills.classList.contains("hidden")) renderSkills(entry, meta.skills);
+        if (meta.prompt && !entry.card.classList.contains("has-prompt")) renderPrompt(entry, meta.prompt);
+      }
+      return entry;
+    }
 
     const card = agentTpl.content.firstElementChild.cloneNode(true);
     const els = {
@@ -124,10 +170,17 @@
       role: $(".js-role", card),
       version: $(".js-version", card),
       doing: $(".js-doing", card),
+      skills: $(".js-skills", card),
+      prompt: $(".js-prompt", card),
+      promptToggle: $(".js-prompt-toggle", card),
     };
     els.role.textContent = role || agentId || "agent";
     if (version !== undefined && version !== null && version !== "") {
       els.version.textContent = "v" + version;
+    }
+    if (meta) {
+      if (meta.skills) renderSkills(els, meta.skills);
+      if (meta.prompt) renderPrompt(els, meta.prompt);
     }
     refs.grid.appendChild(card);
     entry = els;
@@ -189,7 +242,8 @@
 
     switch (ev.type) {
       case "agent.spawned": {
-        getOrCreateAgent(page, ev.agentId, ev.role, ev.version);
+        // Carry the master-authored prompt + granted skills onto the card (graceful if absent).
+        getOrCreateAgent(page, ev.agentId, ev.role, ev.version, { skills: ev.skills, prompt: ev.prompt });
         st.agents += 1;
         setCounter(page, "agents", st.agents);
         break;
@@ -270,7 +324,16 @@
         markActive(page, null);
         break;
       }
-      // run.started, master.planned, critique.made -> no counter impact
+      case "master.planned": {
+        // Surface the master's one-line strategy as a per-page banner.
+        const strat = typeof ev.strategy === "string" ? ev.strategy.trim() : "";
+        if (strat) {
+          refs.strategyText.textContent = strat;
+          refs.strategy.classList.remove("hidden");
+        }
+        break;
+      }
+      // run.started, critique.made -> no counter impact
       default:
         break;
     }
@@ -298,6 +361,10 @@
       refs.grid.innerHTML = "";
       refs.agentMap = new Map();
       refs.doingGlobal.textContent = "";
+      if (refs.strategy) {
+        refs.strategyText.textContent = "";
+        refs.strategy.classList.add("hidden");
+      }
       refs.iframe.removeAttribute("src");
       refs.iframeEmpty.classList.remove("hidden");
       ["agents", "turns", "traces", "improvements", "lessons"].forEach((k) => setCounter(p, k, 0));

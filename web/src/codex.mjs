@@ -46,7 +46,8 @@ const CODEX_BIN = process.env.CODEX_BIN || "codex";
 
 // Spawn one `codex exec` turn. Resolves with the agent's FINAL message (string)
 // read from the --output-last-message file, or rejects with a descriptive Error.
-function codexExecOnce(prompt, timeoutMs) {
+// `effort` overrides the default reasoning effort for this turn (e.g. "high").
+function codexExecOnce(prompt, timeoutMs, effort = EFFORT) {
   return new Promise((resolve, reject) => {
     let settled = false;
     let lastMsgPath = null;
@@ -64,7 +65,7 @@ function codexExecOnce(prompt, timeoutMs) {
         const args = [
           "exec",
           "-c", `model="${MODEL}"`,
-          "-c", `model_reasoning_effort="${EFFORT}"`,
+          "-c", `model_reasoning_effort="${effort}"`,
           "-c", `approval_policy="never"`,
           "-s", "read-only",
           "--skip-git-repo-check",
@@ -91,7 +92,7 @@ function codexExecOnce(prompt, timeoutMs) {
           settled = true;
           try { child.kill("SIGKILL"); } catch { /* ignore */ }
           cleanup();
-          reject(new Error(`codex exec timed out after ${timeoutMs}ms (model=${MODEL}, effort=${EFFORT})`));
+          reject(new Error(`codex exec timed out after ${timeoutMs}ms (model=${MODEL}, effort=${effort})`));
         }, timeoutMs);
 
         // Drain stdout so the pipe never fills and blocks the child.
@@ -116,7 +117,7 @@ function codexExecOnce(prompt, timeoutMs) {
 
           if (code !== 0) {
             return reject(new Error(
-              `codex exec exited with code ${code} (model=${MODEL}, effort=${EFFORT}).\n${tailStderr()}`
+              `codex exec exited with code ${code} (model=${MODEL}, effort=${effort}).\n${tailStderr()}`
             ));
           }
           if (!finalMsg) {
@@ -151,22 +152,23 @@ function codexExecOnce(prompt, timeoutMs) {
  * Run one Codex turn and return its final text. Retries ONCE on failure, then
  * throws. NEVER returns null / a silent fallback.
  * @param {string} prompt
- * @param {{timeoutMs?:number}} [opts]
+ * @param {{timeoutMs?:number, effort?:string}} [opts] - `effort` overrides the
+ *   default reasoning effort for this run (e.g. "high"); defaults to CODEX_EFFORT.
  * @returns {Promise<string>} the model's final message text
  */
-export async function codexRun(prompt, { timeoutMs = DEFAULT_TIMEOUT } = {}) {
+export async function codexRun(prompt, { timeoutMs = DEFAULT_TIMEOUT, effort = EFFORT } = {}) {
   if (!prompt || !String(prompt).trim()) {
     throw new Error("codexRun: empty prompt");
   }
   let firstErr;
   try {
-    return await codexExecOnce(prompt, timeoutMs);
+    return await codexExecOnce(prompt, timeoutMs, effort);
   } catch (err) {
     firstErr = err;
   }
   // single retry
   try {
-    return await codexExecOnce(prompt, timeoutMs);
+    return await codexExecOnce(prompt, timeoutMs, effort);
   } catch (err) {
     throw new Error(
       `codexRun failed after 2 attempts.\n  attempt#1: ${firstErr?.message || firstErr}\n  attempt#2: ${err?.message || err}`
@@ -253,6 +255,117 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson }) {
     );
   }
   return html;
+}
+
+/**
+ * Robustly extract the first balanced JSON object from arbitrary model text.
+ * Codex (esp. with -o last-message) may wrap the JSON in prose, markdown fences,
+ * or trailing commentary; we locate a `{...}` span and JSON.parse it. THROWS if
+ * no parseable object is found.
+ * @param {string} text
+ * @returns {object}
+ */
+function extractJsonObject(text) {
+  if (!text) throw new Error("extractJsonObject: empty input");
+  let s = String(text).trim();
+
+  // Strip a fenced code block if present (```json ... ``` or ``` ... ```).
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) s = fence[1].trim();
+
+  // Fast path: the whole thing is already valid JSON.
+  try { return JSON.parse(s); } catch { /* fall through to scanning */ }
+
+  // Scan for a balanced top-level {...} (string-aware so braces inside strings
+  // don't throw off the depth count).
+  const start = s.indexOf("{");
+  if (start === -1) {
+    const preview = s.slice(0, 200).replace(/\s+/g, " ");
+    throw new Error(`extractJsonObject: no '{' found. preview="${preview}"`);
+  }
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) { esc = false; }
+      else if (ch === "\\") { esc = true; }
+      else if (ch === '"') { inStr = false; }
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        const candidate = s.slice(start, i + 1);
+        try { return JSON.parse(candidate); }
+        catch (err) {
+          throw new Error(`extractJsonObject: found {...} but JSON.parse failed: ${err?.message || err}`);
+        }
+      }
+    }
+  }
+  const preview = s.slice(start, start + 200).replace(/\s+/g, " ");
+  throw new Error(`extractJsonObject: unterminated object. preview="${preview}"`);
+}
+
+/**
+ * STRICT design judge. Runs Codex gpt-5.4 with HIGH reasoning effort to score a
+ * rendered marketing page 0-100 against the brand (tone + DON'Ts). Reserves 90+
+ * for flawless pages and scores below 70 for ANY brand DON'T violation. Returns
+ * ONLY {score:int 0-100, category:string, reasoning:string}. THROWS on failure
+ * (no silent fallback). Codex HIGH is slow (~60-90s) so the timeout is 180s.
+ * @param {{brand:object, html:string, goal:string}} args
+ * @returns {Promise<{score:number, category:string, reasoning:string}>}
+ */
+export async function codexJudge({ brand, html, goal }) {
+  if (!brand || !brand.colors) throw new Error("codexJudge: missing brand/colors");
+  if (!html || !String(html).trim()) throw new Error("codexJudge: missing html");
+  if (!goal) throw new Error("codexJudge: missing goal");
+
+  const c = brand.colors;
+  const tone = Array.isArray(brand.tone) ? brand.tone.join(", ") : (brand.tone || "");
+  const donts = brand.dont || brand.donts || [];
+  const audience = brand.audience || "general";
+  const headingFont = brand.fonts?.heading || "Inter";
+
+  const prompt =
+    `You are a STRICT senior brand & design judge. Score the marketing page below ` +
+    `from 0 to 100 on how well it serves the goal AND obeys the brand.\n\n` +
+    `GOAL: ${goal}\n` +
+    `BRAND: colors primary ${c.primary}, accent ${c.accent}, bg ${c.bg}, text ${c.fg}; ` +
+    `font ${headingFont}; tone ${tone}; audience ${audience}.\n` +
+    `BRAND DON'Ts (hard rules): ${JSON.stringify(donts)}.\n\n` +
+    `SCORING RUBRIC (be harsh and discriminating):\n` +
+    `- Reserve 90-100 ONLY for a flawless page: on-brand, on-tone, strong hierarchy, ` +
+    `real persuasive copy, zero issues.\n` +
+    `- 70-89: solid but with minor flaws.\n` +
+    `- BELOW 70: MANDATORY if the page violates ANY brand DON'T, is off-tone, uses ` +
+    `placeholder/lorem copy, or has weak hierarchy. A single DON'T violation caps the ` +
+    `score under 70 no matter how good the rest is.\n\n` +
+    `Inspect the actual HTML/CSS — check colors used, copy tone, banned patterns, and ` +
+    `whether brand DON'Ts appear. Do not be generous.\n\n` +
+    `PAGE HTML:\n<<<HTML\n${html}\nHTML\n\n` +
+    `Return ONLY a JSON object, no prose, no markdown fences:\n` +
+    `{"score": <integer 0-100>, "category": "<short verdict label>", "reasoning": "<1-3 sentences citing concrete evidence>"}`;
+
+  // HIGH reasoning is slow; give it 180s.
+  const raw = await codexRun(prompt, { effort: "high", timeoutMs: 180_000 });
+  const obj = extractJsonObject(raw);
+
+  let score = Number(obj.score);
+  if (!Number.isFinite(score)) {
+    throw new Error(`codexJudge: non-numeric score in judge output: ${JSON.stringify(obj.score)}`);
+  }
+  score = Math.max(0, Math.min(100, Math.round(score)));
+  const category = typeof obj.category === "string" && obj.category.trim()
+    ? obj.category.trim()
+    : "uncategorized";
+  const reasoning = typeof obj.reasoning === "string" && obj.reasoning.trim()
+    ? obj.reasoning.trim()
+    : "(no reasoning provided)";
+
+  return { score, category, reasoning };
 }
 
 // ---- proof harness: `node web/src/codex.mjs` builds a real TikTok page ----
