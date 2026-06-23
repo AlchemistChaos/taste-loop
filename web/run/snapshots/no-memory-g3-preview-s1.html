@@ -30,7 +30,7 @@
      - 100%-round pills are reserved for CTA buttons.
    =========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Baloo+2:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Baloo+2:wght@400;500;600;700&display=swap');
 
 /* @font-face — ADD ONLY IF the real binaries exist on disk (they currently do NOT).
    Drop Sofia-Pro.woff2 / Sofia-Pro-Soft.woff2 into web/run/fonts/, uncomment, then
@@ -138,7 +138,7 @@
   --radius-sm: 8px;
   --radius-md: 16px;
   --radius-lg: 24px;
-  --radius-image: 8%;   /* approximates the 25%/50% rounded image masks    */
+  --radius-image: 25%;  /* book-legal image-mask roundness (25%); .ds-figure-50 = 50% */
   --radius-pill: 9999px;/* 100% roundness — CTA buttons / bubbles only      */
 
   /* ---- Shadow (doc forbids drop shadows; depth = flat layered blocks) -- */
@@ -174,13 +174,17 @@ body.ds-body {
 .ds-bg-primary       { background: var(--color-primary); color: var(--color-on-primary); }
 .ds-bg-secondary     { background: var(--color-secondary); color: var(--color-on-secondary); }
 
-.ds-surface          { background: var(--color-surface); color: var(--color-fg);
-                       border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.ds-surface          { background: var(--color-bg); color: var(--color-fg); padding: var(--space-6);
+                       border-radius: var(--radius-md); }
 .ds-surface-light    { background: var(--color-white); color: var(--color-fg-ink);
                        border: 1px solid var(--color-border-on-light); border-radius: var(--radius-md); }
-.ds-card             { background: var(--color-surface); color: var(--color-fg);
-                       border: 1px solid var(--color-border); border-radius: var(--radius-lg);
-                       padding: var(--space-6); }
+.ds-card             { background: var(--color-bg); color: var(--color-fg);
+                       border-radius: var(--radius-lg); padding: var(--space-6); }
+
+/* Brand book (p.36/p.41): layer flat blocks in a DIFFERENT color for depth; black/white
+   create focus; NEVER grey backgrounds. Default card = solid black (white text) so it
+   contrasts on Razzmatazz/Splash/white sections; on a DARK section, flip to white. */
+.ds-bg .ds-card, .ds-bg .ds-surface, .ds-bg .ds-feature { background: var(--color-white); color: var(--color-fg-ink); }
 
 /* ===========================================================================
    Layout helpers
@@ -313,8 +317,14 @@ body.ds-body {
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-caption);
   letter-spacing: var(--tracking-caption);
-  background: var(--color-surface);
-  color: var(--color-fg);
+  background: var(--color-white);
+  color: var(--color-fg-ink);
+  min-height: 30px;                                /* book: bubble/pill min 30px */
+}
+/* Context: on a brand-color or white section, flip to a BLACK pill (book p.36: label =
+   Black/White/brand, NEVER grey; preserves "one brand color + black/white" per comp). */
+.ds-bg-primary .ds-chip, .ds-bg-secondary .ds-chip, .ds-bg-light .ds-chip {
+  background: var(--color-fg-ink); color: var(--color-white);
 }
 .ds-chip-invert {                                  /* on a brand-color field */
   background: var(--color-white);
@@ -427,6 +437,7 @@ body.ds-body {
    auto-collapses any hero whose media frame has no real <img>/<svg> (defensive,
    modern browsers — ignored where :has() is unsupported).
    --------------------------------------------------------------------------- */
+.ds-hero--type { padding-top: var(--space-7); padding-bottom: var(--space-8); }
 .ds-hero--type .ds-hero-grid { grid-template-columns: 1fr; max-width: 60rem; }
 .ds-hero--type .ds-hero-title { font-size: clamp(3.25rem, 10vw, var(--font-size-h1)); max-width: 20ch; }
 .ds-hero--type .ds-hero-media { display: none; }
@@ -438,6 +449,11 @@ body.ds-body {
 /* A media frame with no real image is dead space — never render it as a grey box. */
 .ds-figure:not(:has(img, svg)) { display: none; }
 
+/* An EMPTY .ds-bubble-cluster is a fixed 240x240 box of dead space — collapse it.
+   (Codex routinely emits the decorative cluster with NO .ds-bubble circles inside,
+   which otherwise leaves a huge black void above the hero headline.) */
+.ds-bubble-cluster:not(:has(.ds-bubble)) { display: none; }
+
 /* ---------------------------------------------------------------------------
    2.2  .ds-feature-grid — 3-up flat feature grid (use with .ds-grid-3)
    Flat cards, no shadow, a single circular Razzmatazz "mark" per feature
@@ -445,9 +461,8 @@ body.ds-body {
    --------------------------------------------------------------------------- */
 .ds-feature-grid { margin-top: var(--space-8); }
 .ds-feature {
-  background: var(--color-surface-light);
-  color: var(--color-fg-ink);
-  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-fg);
   border-radius: var(--radius-lg);
   padding: var(--space-6);
 }
@@ -553,10 +568,9 @@ body.ds-body {
 }
 .ds-figure-25 { border-radius: 25%; }
 .ds-figure-50 { border-radius: 50%; }                 /* editorial circle crop */
-.ds-figure-bordered { box-shadow: inset 0 0 0 6px var(--color-secondary); } /* inset stroke != drop shadow */
+.ds-figure-bordered { box-shadow: inset 0 0 0 4px var(--color-secondary); } /* inset stroke != drop shadow; 4px = toolkit standard (book p.50) */
 
 /* Rotation — images rotate in 10deg increments ONLY (doc rule). */
-.ds-rotate-6  { transform: rotate(6deg); }            /* hero-figure tilt */
 .ds-rotate-10 { transform: rotate(10deg); }
 .ds-rotate-n10 { transform: rotate(-10deg); }
 
@@ -609,15 +623,128 @@ body.ds-body {
   font-family: var(--font-emphasis);
 }
 
+/* ###########################################################################
+   ###########################################################################
+   DESIGN TOOLKIT — brand-book "toolkit" devices (book pp.36, 40-46, 50)
+   Additive section. These are the small, repeatable brand marks the builder
+   composes onto a page: logo-derived emphasis glyphs that bracket a headline,
+   the logo-circle dot pattern (texture only), the stadium word-bubble that
+   HOLDS copy, mixed-radius rectangles, the 4-color image frames, and Black as
+   a legal text-emphasis color. All flat, no gradients, no drop shadows.
+   ###########################################################################
+   ########################################################################### */
+
+/* ---------------------------------------------------------------------------
+   T.1  Emphasis Marks (book p.45-46)
+   Logo-derived glyphs that BRACKET an H1 — two per headline, in DIFFERENT
+   colors, sized to the headline's x-height (em-sized so they track the type).
+   The square (bracket) mark is reserved for sentence-end. Decorative: mark
+   spans should be aria-hidden. The glyph is painted from a tiny inline SVG
+   used as a MASK over `currentColor`, so the color utilities below tint it.
+   --------------------------------------------------------------------------- */
+.ds-mark {
+  display: inline-block;
+  width: .62em;
+  height: .62em;
+  vertical-align: baseline;
+  background: currentColor;
+  -webkit-mask: center / contain no-repeat;
+  mask: center / contain no-repeat;
+}
+/* Cross / plus (+) — a thick filled plus, opaque so the mask shows fully. */
+.ds-mark-cross {
+  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M40 6h20v34h34v20H60v34H40V60H6V40h34z'/></svg>");
+  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M40 6h20v34h34v20H60v34H40V60H6V40h34z'/></svg>");
+}
+/* Chevron (>) — a filled right-pointing chevron. */
+.ds-mark-chevron {
+  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M30 8L22 22l28 28-28 28 8 14 42-42z'/></svg>");
+  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M30 8L22 22l28 28-28 28 8 14 42-42z'/></svg>");
+}
+/* Corner bracket — sentence-end square corner. */
+.ds-mark-bracket {
+  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M16 16h68v20H36v48H16z'/></svg>");
+  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M16 16h68v20H36v48H16z'/></svg>");
+}
+/* Mark color utilities — two marks per headline must differ in color. */
+.ds-mark-splash { color: var(--color-secondary); }
+.ds-mark-razz   { color: var(--color-primary); }
+.ds-mark-ink    { color: var(--color-fg-ink); }
+.ds-mark-white  { color: var(--color-white); }
+
+/* ---------------------------------------------------------------------------
+   T.2  Pattern (book p.43-44)
+   Logo-circle dot tiling. TEXTURE ONLY — never sits under text. Min dot
+   diameter 20px (default tile), large dots ~50px. `color` sets the dot color.
+   Kept subtle (modest opacity) so it reads as texture, not a foreground block.
+   --------------------------------------------------------------------------- */
+.ds-pattern {
+  background-image: radial-gradient(currentColor 0 10px, transparent 10px); /* 20px dots */
+  background-size: 40px 40px;
+  opacity: .18;
+}
+.ds-pattern-lg {
+  background-image: radial-gradient(currentColor 0 25px, transparent 25px); /* 50px dots */
+  background-size: 80px 80px;
+}
+.ds-pattern-splash { color: var(--color-secondary); }
+.ds-pattern-razz   { color: var(--color-primary); }
+.ds-pattern-ink    { color: var(--color-fg-ink); }
+
+/* ---------------------------------------------------------------------------
+   T.3  Word-bubble (book p.40)
+   A stadium pill that HOLDS words / CTAs (distinct from the decorative
+   .ds-bubble-cluster signature device). White field, black text by default.
+   --------------------------------------------------------------------------- */
+.ds-bubble-text {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;                              /* book: bubble/pill min 30px */
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-heading);
+  font-weight: var(--font-weight-bold);
+  background: var(--color-white);
+  color: var(--color-fg-ink);
+}
+.ds-bubble-text-splash { background: var(--color-secondary); color: var(--color-fg-ink); }
+.ds-bubble-text-razz   { background: var(--color-primary);   color: var(--color-white); }
+.ds-bubble-text-stroke { background: transparent; box-shadow: inset 0 0 0 2px currentColor; }
+
+/* ---------------------------------------------------------------------------
+   T.4  Mixed-radius (book p.41 — up to 2 curve proportions per element)
+   --------------------------------------------------------------------------- */
+.ds-rrect-mixed {
+  border-radius: var(--radius-pill) var(--radius-lg) var(--radius-pill) var(--radius-lg);
+}
+
+/* ---------------------------------------------------------------------------
+   T.5  4-color image-frame borders (book p.50)
+   The existing .ds-figure-bordered (Splash) plus the other three brand colors.
+   ONE consistent 4px inset stroke across all four (a stroke, not a drop shadow).
+   --------------------------------------------------------------------------- */
+.ds-figure-bordered       { box-shadow: inset 0 0 0 4px var(--color-secondary); } /* Splash */
+.ds-figure-bordered-razz  { box-shadow: inset 0 0 0 4px var(--color-primary); }
+.ds-figure-bordered-ink   { box-shadow: inset 0 0 0 4px var(--color-black); }
+.ds-figure-bordered-white { box-shadow: inset 0 0 0 4px var(--color-white); }
+
+/* ---------------------------------------------------------------------------
+   T.6  Black emphasis (book p.36 — Black is also a legal text-emphasis color)
+   --------------------------------------------------------------------------- */
+.ds-emph-ink {
+  color: var(--color-fg-ink);
+  font-family: var(--font-emphasis);
+}
+
 </style>
   <style>html,body{background:#000000;color:#FFFFFF;margin:0}</style>
-<style>/*gap-fix7*/.ds-bubble-cluster:not(:has(.ds-bubble)){display:none!important}.ds-figure:not(:has(img,svg)){display:none!important}.ds-hero--type{padding-top:var(--space-7)!important;padding-bottom:var(--space-8)!important}.ds-card,.ds-feature,.ds-surface{background:var(--color-bg)!important;color:var(--color-fg)!important;border:0!important;border-radius:var(--radius-lg)!important;padding:var(--space-6)!important}.ds-bg .ds-card,.ds-bg .ds-feature,.ds-bg .ds-surface{background:var(--color-white)!important;color:var(--color-fg-ink)!important}.ds-chip{background:var(--color-white)!important;color:var(--color-fg-ink)!important;min-height:30px!important}.ds-bg-primary .ds-chip,.ds-bg-secondary .ds-chip,.ds-bg-light .ds-chip{background:var(--color-fg-ink)!important;color:var(--color-white)!important}</style></head>
+<style>/*gap-fix8*/.ds-bubble-cluster:not(:has(.ds-bubble)){display:none!important}.ds-hero--type .ds-bubble-cluster{display:none!important}.ds-figure:not(:has(img,svg)){display:none!important}.ds-hero--type{padding-top:var(--space-7)!important;padding-bottom:var(--space-8)!important}.ds-card,.ds-feature,.ds-surface{background:var(--color-bg)!important;color:var(--color-fg)!important;border:0!important;border-radius:var(--radius-lg)!important;padding:var(--space-6)!important}.ds-bg .ds-card,.ds-bg .ds-feature,.ds-bg .ds-surface{background:var(--color-white)!important;color:var(--color-fg-ink)!important}.ds-chip{background:var(--color-white)!important;color:var(--color-fg-ink)!important;min-height:30px!important}.ds-bg-primary .ds-chip,.ds-bg-secondary .ds-chip,.ds-bg-light .ds-chip{background:var(--color-fg-ink)!important;color:var(--color-white)!important}</style></head>
 <body class="ds-bg">
   <main class="ds-section">
     <div class="ds-container ds-stack">
       <span class="ds-chip ds-chip-outline ds-caption">live preview · building…</span>
-      <h1 class="ds-h1">60-Second Videos, 100% Engagement</h1>
-      <p class="ds-lead">See why our creators and businesses are crushing it on TikTok with fun, direct content that turns views into sales.</p>
+      <h1 class="ds-h1">Unlock Your Audience in 60 Seconds 🚀</h1>
+      <p class="ds-lead">See how TikTok for Business turns quick clips into loyal fans.</p>
       <div>
         <a class="ds-btn ds-btn-primary" href="#">Get started free</a>
         <a class="ds-btn ds-btn-outline" href="#">See how it works</a>

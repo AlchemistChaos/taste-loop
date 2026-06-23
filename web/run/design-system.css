@@ -433,6 +433,10 @@ body.ds-body {
 .ds-hero--type .ds-hero-grid { grid-template-columns: 1fr; max-width: 60rem; }
 .ds-hero--type .ds-hero-title { font-size: clamp(3.25rem, 10vw, var(--font-size-h1)); max-width: 20ch; }
 .ds-hero--type .ds-hero-media { display: none; }
+/* Type hero LEADS with the headline + its emphasis marks (the brand accent). The
+   decorative 240x240 circle cluster — and any word-bubbles the builder mis-nests in
+   it — otherwise sits between the chip and the headline as a dead gap. Suppress it. */
+.ds-hero--type .ds-bubble-cluster { display: none; }
 
 .ds-hero-grid:not(:has(.ds-hero-media :is(img, svg))) { grid-template-columns: 1fr; max-width: 60rem; }
 .ds-hero-grid:not(:has(.ds-hero-media :is(img, svg))) .ds-hero-title { font-size: clamp(3.25rem, 10vw, var(--font-size-h1)); max-width: 20ch; }

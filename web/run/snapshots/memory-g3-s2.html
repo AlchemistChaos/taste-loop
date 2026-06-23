@@ -3,155 +3,56 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TikTok for Business — Turn 60-Second Videos Into Customers</title>
+  <title>TikTok for Business — turn 60-second videos into customers</title>
   <style>
     :root {
-      --color-primary: var(--color-razzmatazz);
-      --color-secondary: var(--color-splash);
-      --hero-pill-bg: var(--color-primary);
-      --hero-pill-fg: var(--color-fg);
+      --hero-max: 18ch;
     }
 
-    .page-shell {
-      background: var(--color-bg);
+    .page-wordmark {
+      font: inherit;
+      letter-spacing: 0;
     }
 
-    .panel-black {
-      background: var(--color-bg);
-      color: var(--color-fg);
+    .ds-hero-title {
+      max-width: var(--hero-max);
     }
 
-    .panel-white {
-      background: var(--color-fg);
-      color: var(--color-bg);
+    .ds-panel-fill {
+      min-height: 100%;
     }
 
-    .panel-primary {
-      background: var(--color-primary);
-      color: var(--color-fg);
+    .ds-proof-grid,
+    .ds-problem-grid,
+    .ds-steps-grid {
+      align-items: stretch;
     }
 
-    .section-frame {
-      padding-block: var(--space-9);
+    .ds-card-fill {
+      height: 100%;
     }
 
-    .hero-lockup,
-    .proof-stack,
-    .cta-stack {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-6);
+    .ds-pattern-band {
+      height: var(--space-8);
+      width: 100%;
     }
 
-    .hero-copy {
-      max-width: 720px;
+    .ds-proof-number {
+      display: block;
     }
 
-    .hero-copy .ds-h1 {
-      margin: 0;
-      font-size: var(--space-10);
-      line-height: 0.95;
+    .ds-cta-frame {
+      border: 2px solid var(--color-fg);
+      border-radius: var(--radius-lg);
+      padding: var(--space-8);
     }
 
-    .hero-copy .ds-subhead,
-    .hero-copy .ds-lead,
-    .problem-card .ds-body-text,
-    .step-card .ds-body-text,
-    .proof-note,
-    .cta-copy .ds-body-text {
-      max-width: 40rem;
+    .ds-cta-split {
+      align-items: center;
     }
 
-    .hero-chip-fix {
-      background: var(--hero-pill-bg);
-      color: var(--hero-pill-fg);
-      border: 0;
-    }
-
-    .hero-accent-row,
-    .proof-accent-row,
-    .cta-accent-row {
-      display: flex;
-      justify-content: flex-end;
-    }
-
-    .problem-grid,
-    .steps-grid,
-    .proof-grid {
-      margin-top: var(--space-7);
-    }
-
-    .problem-card,
-    .step-card,
-    .proof-card {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-4);
-      padding: var(--space-6);
-      border: 1px solid var(--color-border);
-      border-radius: var(--radius-md);
-      background: transparent;
-    }
-
-    .panel-white .problem-card,
-    .panel-white .proof-card {
-      border-color: var(--color-bg);
-    }
-
-    .panel-primary .step-card {
-      border-color: var(--color-fg);
-    }
-
-    .problem-card .ds-h3,
-    .step-card .ds-h3,
-    .proof-card .ds-h3 {
-      margin: 0;
-    }
-
-    .stat-list {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: var(--space-5);
-      margin-top: var(--space-7);
-    }
-
-    .stat-item {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-      padding-top: var(--space-4);
-      border-top: 2px solid currentColor;
-    }
-
-    .stat-value {
-      font: 700 var(--space-8)/1 var(--font-heading);
-    }
-
-    .proof-grid {
-      align-items: start;
-    }
-
-    .proof-note {
-      color: var(--color-muted);
-    }
-
-    .panel-white .proof-note {
-      color: var(--color-bg);
-      opacity: 0.72;
-    }
-
-    .cta-actions {
-      margin-top: var(--space-2);
-    }
-
-    @media (max-width: 900px) {
-      .hero-copy .ds-h1 {
-        font-size: var(--space-9);
-      }
-
-      .stat-list {
-        grid-template-columns: 1fr;
-      }
+    .ds-bubble-cluster[aria-hidden="true"] {
+      pointer-events: none;
     }
   </style>
 <style data-ds="taste-loop-design-system">
@@ -179,7 +80,7 @@
      - 100%-round pills are reserved for CTA buttons.
    =========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Baloo+2:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Baloo+2:wght@400;500;600;700&display=swap');
 
 /* @font-face — ADD ONLY IF the real binaries exist on disk (they currently do NOT).
    Drop Sofia-Pro.woff2 / Sofia-Pro-Soft.woff2 into web/run/fonts/, uncomment, then
@@ -287,7 +188,7 @@
   --radius-sm: 8px;
   --radius-md: 16px;
   --radius-lg: 24px;
-  --radius-image: 8%;   /* approximates the 25%/50% rounded image masks    */
+  --radius-image: 25%;  /* book-legal image-mask roundness (25%); .ds-figure-50 = 50% */
   --radius-pill: 9999px;/* 100% roundness — CTA buttons / bubbles only      */
 
   /* ---- Shadow (doc forbids drop shadows; depth = flat layered blocks) -- */
@@ -323,13 +224,17 @@ body.ds-body {
 .ds-bg-primary       { background: var(--color-primary); color: var(--color-on-primary); }
 .ds-bg-secondary     { background: var(--color-secondary); color: var(--color-on-secondary); }
 
-.ds-surface          { background: var(--color-surface); color: var(--color-fg);
-                       border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.ds-surface          { background: var(--color-bg); color: var(--color-fg); padding: var(--space-6);
+                       border-radius: var(--radius-md); }
 .ds-surface-light    { background: var(--color-white); color: var(--color-fg-ink);
                        border: 1px solid var(--color-border-on-light); border-radius: var(--radius-md); }
-.ds-card             { background: var(--color-surface); color: var(--color-fg);
-                       border: 1px solid var(--color-border); border-radius: var(--radius-lg);
-                       padding: var(--space-6); }
+.ds-card             { background: var(--color-bg); color: var(--color-fg);
+                       border-radius: var(--radius-lg); padding: var(--space-6); }
+
+/* Brand book (p.36/p.41): layer flat blocks in a DIFFERENT color for depth; black/white
+   create focus; NEVER grey backgrounds. Default card = solid black (white text) so it
+   contrasts on Razzmatazz/Splash/white sections; on a DARK section, flip to white. */
+.ds-bg .ds-card, .ds-bg .ds-surface, .ds-bg .ds-feature { background: var(--color-white); color: var(--color-fg-ink); }
 
 /* ===========================================================================
    Layout helpers
@@ -462,8 +367,14 @@ body.ds-body {
   font-weight: var(--font-weight-semibold);
   font-size: var(--font-size-caption);
   letter-spacing: var(--tracking-caption);
-  background: var(--color-surface);
-  color: var(--color-fg);
+  background: var(--color-white);
+  color: var(--color-fg-ink);
+  min-height: 30px;                                /* book: bubble/pill min 30px */
+}
+/* Context: on a brand-color or white section, flip to a BLACK pill (book p.36: label =
+   Black/White/brand, NEVER grey; preserves "one brand color + black/white" per comp). */
+.ds-bg-primary .ds-chip, .ds-bg-secondary .ds-chip, .ds-bg-light .ds-chip {
+  background: var(--color-fg-ink); color: var(--color-white);
 }
 .ds-chip-invert {                                  /* on a brand-color field */
   background: var(--color-white);
@@ -568,14 +479,42 @@ body.ds-body {
 }
 
 /* ---------------------------------------------------------------------------
+   2.1b  .ds-hero--type — NO-IMAGE hero (type-led, full-bleed)
+   When no real hero image is supplied, the split hero's media half is dead
+   space. This collapses the hero to ONE full-bleed TYPE column: an oversized
+   headline that carries the page on its own — never an empty media frame.
+   Apply `.ds-hero--type` (explicit, always valid); the :has() rule below ALSO
+   auto-collapses any hero whose media frame has no real <img>/<svg> (defensive,
+   modern browsers — ignored where :has() is unsupported).
+   --------------------------------------------------------------------------- */
+.ds-hero--type { padding-top: var(--space-7); padding-bottom: var(--space-8); }
+.ds-hero--type .ds-hero-grid { grid-template-columns: 1fr; max-width: 60rem; }
+.ds-hero--type .ds-hero-title { font-size: clamp(3.25rem, 10vw, var(--font-size-h1)); max-width: 20ch; }
+.ds-hero--type .ds-hero-media { display: none; }
+
+.ds-hero-grid:not(:has(.ds-hero-media :is(img, svg))) { grid-template-columns: 1fr; max-width: 60rem; }
+.ds-hero-grid:not(:has(.ds-hero-media :is(img, svg))) .ds-hero-title { font-size: clamp(3.25rem, 10vw, var(--font-size-h1)); max-width: 20ch; }
+.ds-hero-grid:not(:has(.ds-hero-media :is(img, svg))) .ds-hero-media { display: none; }
+
+/* A media frame with no real image is dead space — never render it as a grey box. */
+.ds-figure:not(:has(img, svg)) { display: none; }
+
+/* An EMPTY .ds-bubble-cluster is a fixed 240x240 box of dead space — collapse it.
+   (Codex routinely emits the decorative cluster with NO .ds-bubble circles inside,
+   which otherwise leaves a huge black void above the hero headline.) */
+.ds-bubble-cluster:not(:has(.ds-bubble)) { display: none; }
+
+/* ---------------------------------------------------------------------------
    2.2  .ds-feature-grid — 3-up flat feature grid (use with .ds-grid-3)
    Flat cards, no shadow, a single circular Razzmatazz "mark" per feature
    (a nod to the bubble). Generous --space-6 rhythm.
    --------------------------------------------------------------------------- */
 .ds-feature-grid { margin-top: var(--space-8); }
 .ds-feature {
-  background: transparent;
-  padding: var(--space-6) 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
 }
 .ds-feature-mark {
   display: block;
@@ -679,10 +618,9 @@ body.ds-body {
 }
 .ds-figure-25 { border-radius: 25%; }
 .ds-figure-50 { border-radius: 50%; }                 /* editorial circle crop */
-.ds-figure-bordered { box-shadow: inset 0 0 0 6px var(--color-secondary); } /* inset stroke != drop shadow */
+.ds-figure-bordered { box-shadow: inset 0 0 0 4px var(--color-secondary); } /* inset stroke != drop shadow; 4px = toolkit standard (book p.50) */
 
 /* Rotation — images rotate in 10deg increments ONLY (doc rule). */
-.ds-rotate-6  { transform: rotate(6deg); }            /* hero-figure tilt */
 .ds-rotate-10 { transform: rotate(10deg); }
 .ds-rotate-n10 { transform: rotate(-10deg); }
 
@@ -735,122 +673,275 @@ body.ds-body {
   font-family: var(--font-emphasis);
 }
 
+/* ###########################################################################
+   ###########################################################################
+   DESIGN TOOLKIT — brand-book "toolkit" devices (book pp.36, 40-46, 50)
+   Additive section. These are the small, repeatable brand marks the builder
+   composes onto a page: logo-derived emphasis glyphs that bracket a headline,
+   the logo-circle dot pattern (texture only), the stadium word-bubble that
+   HOLDS copy, mixed-radius rectangles, the 4-color image frames, and Black as
+   a legal text-emphasis color. All flat, no gradients, no drop shadows.
+   ###########################################################################
+   ########################################################################### */
+
+/* ---------------------------------------------------------------------------
+   T.1  Emphasis Marks (book p.45-46)
+   Logo-derived glyphs that BRACKET an H1 — two per headline, in DIFFERENT
+   colors, sized to the headline's x-height (em-sized so they track the type).
+   The square (bracket) mark is reserved for sentence-end. Decorative: mark
+   spans should be aria-hidden. The glyph is painted from a tiny inline SVG
+   used as a MASK over `currentColor`, so the color utilities below tint it.
+   --------------------------------------------------------------------------- */
+.ds-mark {
+  display: inline-block;
+  width: .62em;
+  height: .62em;
+  vertical-align: baseline;
+  background: currentColor;
+  -webkit-mask: center / contain no-repeat;
+  mask: center / contain no-repeat;
+}
+/* Cross / plus (+) — a thick filled plus, opaque so the mask shows fully. */
+.ds-mark-cross {
+  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M40 6h20v34h34v20H60v34H40V60H6V40h34z'/></svg>");
+  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M40 6h20v34h34v20H60v34H40V60H6V40h34z'/></svg>");
+}
+/* Chevron (>) — a filled right-pointing chevron. */
+.ds-mark-chevron {
+  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M30 8L22 22l28 28-28 28 8 14 42-42z'/></svg>");
+  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M30 8L22 22l28 28-28 28 8 14 42-42z'/></svg>");
+}
+/* Corner bracket — sentence-end square corner. */
+.ds-mark-bracket {
+  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M16 16h68v20H36v48H16z'/></svg>");
+  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M16 16h68v20H36v48H16z'/></svg>");
+}
+/* Mark color utilities — two marks per headline must differ in color. */
+.ds-mark-splash { color: var(--color-secondary); }
+.ds-mark-razz   { color: var(--color-primary); }
+.ds-mark-ink    { color: var(--color-fg-ink); }
+.ds-mark-white  { color: var(--color-white); }
+
+/* ---------------------------------------------------------------------------
+   T.2  Pattern (book p.43-44)
+   Logo-circle dot tiling. TEXTURE ONLY — never sits under text. Min dot
+   diameter 20px (default tile), large dots ~50px. `color` sets the dot color.
+   Kept subtle (modest opacity) so it reads as texture, not a foreground block.
+   --------------------------------------------------------------------------- */
+.ds-pattern {
+  background-image: radial-gradient(currentColor 0 10px, transparent 10px); /* 20px dots */
+  background-size: 40px 40px;
+  opacity: .18;
+}
+.ds-pattern-lg {
+  background-image: radial-gradient(currentColor 0 25px, transparent 25px); /* 50px dots */
+  background-size: 80px 80px;
+}
+.ds-pattern-splash { color: var(--color-secondary); }
+.ds-pattern-razz   { color: var(--color-primary); }
+.ds-pattern-ink    { color: var(--color-fg-ink); }
+
+/* ---------------------------------------------------------------------------
+   T.3  Word-bubble (book p.40)
+   A stadium pill that HOLDS words / CTAs (distinct from the decorative
+   .ds-bubble-cluster signature device). White field, black text by default.
+   --------------------------------------------------------------------------- */
+.ds-bubble-text {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;                              /* book: bubble/pill min 30px */
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-heading);
+  font-weight: var(--font-weight-bold);
+  background: var(--color-white);
+  color: var(--color-fg-ink);
+}
+.ds-bubble-text-splash { background: var(--color-secondary); color: var(--color-fg-ink); }
+.ds-bubble-text-razz   { background: var(--color-primary);   color: var(--color-white); }
+.ds-bubble-text-stroke { background: transparent; box-shadow: inset 0 0 0 2px currentColor; }
+
+/* ---------------------------------------------------------------------------
+   T.4  Mixed-radius (book p.41 — up to 2 curve proportions per element)
+   --------------------------------------------------------------------------- */
+.ds-rrect-mixed {
+  border-radius: var(--radius-pill) var(--radius-lg) var(--radius-pill) var(--radius-lg);
+}
+
+/* ---------------------------------------------------------------------------
+   T.5  4-color image-frame borders (book p.50)
+   The existing .ds-figure-bordered (Splash) plus the other three brand colors.
+   ONE consistent 4px inset stroke across all four (a stroke, not a drop shadow).
+   --------------------------------------------------------------------------- */
+.ds-figure-bordered       { box-shadow: inset 0 0 0 4px var(--color-secondary); } /* Splash */
+.ds-figure-bordered-razz  { box-shadow: inset 0 0 0 4px var(--color-primary); }
+.ds-figure-bordered-ink   { box-shadow: inset 0 0 0 4px var(--color-black); }
+.ds-figure-bordered-white { box-shadow: inset 0 0 0 4px var(--color-white); }
+
+/* ---------------------------------------------------------------------------
+   T.6  Black emphasis (book p.36 — Black is also a legal text-emphasis color)
+   --------------------------------------------------------------------------- */
+.ds-emph-ink {
+  color: var(--color-fg-ink);
+  font-family: var(--font-emphasis);
+}
+
 </style>
-<style>/*gap-fix7*/.ds-bubble-cluster:not(:has(.ds-bubble)){display:none!important}.ds-figure:not(:has(img,svg)){display:none!important}.ds-hero--type{padding-top:var(--space-7)!important;padding-bottom:var(--space-8)!important}.ds-card,.ds-feature,.ds-surface{background:var(--color-bg)!important;color:var(--color-fg)!important;border:0!important;border-radius:var(--radius-lg)!important;padding:var(--space-6)!important}.ds-bg .ds-card,.ds-bg .ds-feature,.ds-bg .ds-surface{background:var(--color-white)!important;color:var(--color-fg-ink)!important}.ds-chip{background:var(--color-white)!important;color:var(--color-fg-ink)!important;min-height:30px!important}.ds-bg-primary .ds-chip,.ds-bg-secondary .ds-chip,.ds-bg-light .ds-chip{background:var(--color-fg-ink)!important;color:var(--color-white)!important}</style></head>
-<body class="ds-body page-shell">
-  <main aria-label="TikTok for Business marketing page">
-    <section class="ds-section ds-hero panel-black section-frame" aria-labelledby="hero-title">
-      <div class="ds-container hero-lockup">
-        <span class="ds-chip hero-chip-fix" aria-label="Campaign label">TikTok for Business</span>
-        <div class="hero-copy ds-stack">
-          <h1 id="hero-title" class="ds-h1">Unlock 60-Second <span class="ds-emph">Magic</span> 🚀</h1>
-          <p class="ds-subhead">Show off your creativity and turn views into sales.</p>
-          <p class="ds-lead">Make short videos that stop thumbs, spark comments, and move real customers from “I’m curious” to “I’m buying.”</p>
-          <div class="ds-actions" aria-label="Primary calls to action">
-            <a href="#cta" class="ds-btn ds-btn-primary" aria-label="Start your TikTok campaign">Start creating</a>
-            <a href="#how-it-works" class="ds-btn ds-btn-outline" aria-label="See how TikTok turns videos into customers">See how it works</a>
-          </div>
-        </div>
-        <div class="hero-accent-row" aria-hidden="true">
-          <div class="ds-bubble-cluster"></div>
-        </div>
+<style>/*gap-fix8*/.ds-bubble-cluster:not(:has(.ds-bubble)){display:none!important}.ds-hero--type .ds-bubble-cluster{display:none!important}.ds-figure:not(:has(img,svg)){display:none!important}.ds-hero--type{padding-top:var(--space-7)!important;padding-bottom:var(--space-8)!important}.ds-card,.ds-feature,.ds-surface{background:var(--color-bg)!important;color:var(--color-fg)!important;border:0!important;border-radius:var(--radius-lg)!important;padding:var(--space-6)!important}.ds-bg .ds-card,.ds-bg .ds-feature,.ds-bg .ds-surface{background:var(--color-white)!important;color:var(--color-fg-ink)!important}.ds-chip{background:var(--color-white)!important;color:var(--color-fg-ink)!important;min-height:30px!important}.ds-bg-primary .ds-chip,.ds-bg-secondary .ds-chip,.ds-bg-light .ds-chip{background:var(--color-fg-ink)!important;color:var(--color-white)!important}</style></head>
+<body class="ds-body">
+  <section id="hero" class="ds-section ds-bg ds-hero ds-hero--type">
+    <div class="ds-container ds-stack">
+      <div class="ds-chip">TikTok for Business</div>
+      <div class="ds-bubble-cluster" aria-hidden="true">
+        <span class="ds-bubble ds-bubble-text-razz"></span>
+        <span class="ds-bubble ds-bubble-text-stroke"></span>
+        <span class="ds-bubble ds-bubble-text-splash"></span>
       </div>
-    </section>
-
-    <section class="ds-section ds-feature-grid panel-white section-frame" aria-labelledby="problem-title">
-      <div class="ds-container">
-        <div class="ds-stack">
-          <span class="ds-chip" aria-label="Section label">The problem</span>
-          <h2 id="problem-title" class="ds-h2">Attention disappears fast. Your sales pitch should not.</h2>
-          <p class="ds-body-text">Creators and brands do not need longer ads. They need sharper stories that land in under a minute and make people act before the scroll wins.</p>
-        </div>
-        <div class="ds-grid-3 problem-grid" role="list" aria-label="Three marketing challenges solved by TikTok">
-          <article class="problem-card" role="listitem">
-            <h3 class="ds-h3">Views without action</h3>
-            <p class="ds-body-text">A viral post means nothing if people watch, laugh, and leave. Build clips that point straight to the next tap.</p>
-          </article>
-          <article class="problem-card" role="listitem">
-            <h3 class="ds-h3">Creative that feels like an ad</h3>
-            <p class="ds-body-text">People skip polished corporate talk. Native, playful video keeps your brand in the conversation instead of outside it.</p>
-          </article>
-          <article class="problem-card" role="listitem">
-            <h3 class="ds-h3">Too much guesswork</h3>
-            <p class="ds-body-text">When every second counts, you need a clear hook, a quick payoff, and a reason to buy now.</p>
-          </article>
-        </div>
+      <div class="ds-stack">
+        <p class="ds-subhead">
+          <span class="ds-mark ds-mark-cross ds-mark-splash" aria-hidden="true"></span>
+          Turn 60-second videos into customers
+        </p>
+        <h1 class="ds-h1 ds-hero-title">
+          Make TikToks that move <span class="ds-emph">people.</span>
+          <span class="ds-mark ds-mark-chevron ds-mark-razz" aria-hidden="true"></span>
+        </h1>
+        <p class="ds-lead">
+          Don’t make ads people scroll past. Make videos people want to watch, share, and shop from. That’s how small brands get big attention without burning the whole budget.
+        </p>
       </div>
-    </section>
-
-    <section id="how-it-works" class="ds-section ds-steps panel-primary section-frame" aria-labelledby="steps-title">
-      <div class="ds-container">
-        <div class="ds-stack">
-          <span class="ds-chip" aria-label="Section label">How it works</span>
-          <h2 id="steps-title" class="ds-h2">Turn one short video into a customer path that actually moves.</h2>
-          <p class="ds-body-text">Keep it direct. Keep it entertaining. Keep it built for the feed people already love.</p>
-        </div>
-        <div class="ds-grid-3 steps-grid" role="list" aria-label="Three steps to convert viewers into customers">
-          <article class="step-card" role="listitem">
-            <h3 class="ds-h3">1. Hook fast</h3>
-            <p class="ds-body-text">Lead with the payoff in the first seconds. Show the product, the result, or the reaction right away.</p>
-          </article>
-          <article class="step-card" role="listitem">
-            <h3 class="ds-h3">2. Make it feel native</h3>
-            <p class="ds-body-text">Use creator energy, quick cuts, and real talk so your message feels like content people chose to watch.</p>
-          </article>
-          <article class="step-card" role="listitem">
-            <h3 class="ds-h3">3. Drive the click</h3>
-            <p class="ds-body-text">Close with a clear next move: shop, sign up, book, or learn more. No vague ask. No wasted second.</p>
-          </article>
-        </div>
+      <div class="ds-actions">
+        <a class="ds-btn ds-btn-primary" href="#cta">Get started</a>
+        <a class="ds-btn ds-btn-outline" href="#how-it-works">See how it works</a>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section class="ds-section ds-stat-band panel-black section-frame" aria-labelledby="proof-title">
-      <div class="ds-container proof-stack">
-        <div class="ds-grid-2 proof-grid">
+  <section id="problem" class="ds-section ds-bg-light">
+    <div class="ds-pattern ds-pattern-razz ds-pattern-band" aria-hidden="true"></div>
+    <div class="ds-container ds-stack">
+      <div class="ds-chip">Why it hits</div>
+      <div class="ds-stack">
+        <h2 class="ds-h2">Your next <span class="ds-emph">customer.</span> is already scrolling</h2>
+        <p class="ds-lead">
+          The old playbook asks for polished campaigns, long timelines, and a lot of crossed fingers. TikTok rewards brands that show up like creators: fast, fun, and made for the feed.
+        </p>
+      </div>
+      <div class="ds-feature-grid ds-grid-3 ds-problem-grid">
+        <article class="ds-surface ds-stack ds-card-fill">
+          <div class="ds-chip">Stop the skip</div>
+          <h3 class="ds-subhead">Hook people in the first second</h3>
+          <p class="ds-body-text">
+            Native-looking creative feels right at home in the For You feed, so your message lands before the thumb keeps moving.
+          </p>
+        </article>
+        <article class="ds-surface ds-stack ds-card-fill">
+          <div class="ds-chip">Stretch the budget</div>
+          <h3 class="ds-subhead">Big ideas beat big production</h3>
+          <p class="ds-body-text">
+            A sharp concept, a real voice, and a simple setup can go a long way. Make it scrappy. Make it memorable. Make graphs go up.
+          </p>
+        </article>
+        <article class="ds-surface ds-stack ds-card-fill">
+          <div class="ds-chip">Turn views into action</div>
+          <h3 class="ds-subhead">Creative that actually sells</h3>
+          <p class="ds-body-text">
+            When your video feels useful, funny, or worth sending to a friend, clicks and checkouts feel like the next natural move.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="how-it-works" class="ds-section ds-bg-primary ds-steps">
+    <div class="ds-container ds-stack">
+      <div class="ds-chip">How it works</div>
+      <div class="ds-stack">
+        <h2 class="ds-h2">Don’t make ads. Make <span class="ds-emph-ink">TikToks.</span></h2>
+        <p class="ds-lead">
+          Keep it simple. Build for the feed. Let the creative do the hard part.
+        </p>
+      </div>
+      <div class="ds-grid-3 ds-steps-grid">
+        <article class="ds-surface ds-stack ds-card-fill">
+          <div class="ds-chip">1</div>
+          <h3 class="ds-subhead">Lead with the good part</h3>
+          <p class="ds-body-text">
+            Start with the demo, the payoff, the reaction, or the line that makes someone stay. No slow wind-up needed.
+          </p>
+        </article>
+        <article class="ds-surface ds-stack ds-card-fill">
+          <div class="ds-chip">2</div>
+          <h3 class="ds-subhead">Talk like a creator</h3>
+          <p class="ds-body-text">
+            Use a real voice, clear captions, and a point of view. If it sounds like a boardroom wrote it, keep rewriting.
+          </p>
+        </article>
+        <article class="ds-surface ds-stack ds-card-fill">
+          <div class="ds-chip">3</div>
+          <h3 class="ds-subhead">Make the next step obvious</h3>
+          <p class="ds-body-text">
+            Give people one clean move to make: shop now, learn more, or follow along. Direct wins when it still feels natural.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="proof" class="ds-section ds-bg">
+    <div class="ds-container ds-stack">
+      <div class="ds-chip">Proof</div>
+      <div class="ds-stack">
+        <h2 class="ds-h2">Creative that gets watched gets <span class="ds-emph">results.</span></h2>
+        <p class="ds-lead">
+          This is where reach meets action. When brands show up with TikTok-native creative, the numbers stop looking sleepy.
+        </p>
+      </div>
+      <div class="ds-stat-band ds-grid-3 ds-proof-grid">
+        <article class="ds-surface ds-stack ds-card-fill">
+          <span class="ds-h2 ds-proof-number">60s</span>
+          <p class="ds-subhead">is plenty of time to show the product, the vibe, and the reason to care</p>
+        </article>
+        <article class="ds-surface ds-stack ds-card-fill">
+          <span class="ds-h2 ds-proof-number">1 feed</span>
+          <p class="ds-subhead">where discovery, culture, and checkout can happen in the same scroll session</p>
+        </article>
+        <article class="ds-surface ds-stack ds-card-fill">
+          <span class="ds-h2 ds-proof-number">More action</span>
+          <p class="ds-subhead">when your creative feels like content first and promotion second</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="cta" class="ds-section ds-bg-primary ds-cta-band">
+    <div class="ds-container">
+      <div class="ds-cta-frame">
+        <div class="ds-grid-2 ds-cta-split">
           <div class="ds-stack">
-            <span class="ds-chip" aria-label="Section label">Proof</span>
-            <h2 id="proof-title" class="ds-h2">Big attention is nice. Measurable momentum is better.</h2>
-            <p class="ds-body-text">Short-form wins when it is built to entertain first and convert second. That is where performance starts to compound.</p>
+            <div class="ds-chip">Ready when you are</div>
+            <h2 class="ds-h2">Make your next <span class="ds-emph-ink">post.</span> pull its weight</h2>
+            <p class="ds-lead">
+              Bring the idea. Bring the offer. Bring a little nerve. We’ll help you turn quick creative into real customer momentum.
+            </p>
           </div>
-          <div class="proof-accent-row" aria-hidden="true">
-            <div class="ds-bubble-cluster"></div>
+          <div class="ds-stack">
+            <div class="ds-bubble-cluster" aria-hidden="true">
+              <span class="ds-bubble ds-bubble-text-stroke"></span>
+              <span class="ds-bubble ds-bubble-text-splash"></span>
+              <span class="ds-bubble ds-bubble-text-razz"></span>
+            </div>
+            <div class="ds-actions">
+              <a class="ds-btn ds-btn-on-primary" href="#">Start now</a>
+              <a class="ds-btn ds-btn-ghost" href="#">Talk to sales</a>
+            </div>
+            <p class="ds-caption">
+              For marketers who need results and creators who know boring never wins.
+            </p>
           </div>
-        </div>
-        <div class="stat-list" aria-label="Key performance statistics">
-          <div class="stat-item">
-            <span class="stat-value">60s</span>
-            <p class="ds-body-text">Enough time to hook, prove value, and push a decision.</p>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value">3 steps</span>
-            <p class="ds-body-text">Hook, entertain, convert. Clean structure beats bloated messaging.</p>
-          </div>
-          <div class="stat-item">
-            <span class="stat-value">1 clear ask</span>
-            <p class="ds-body-text">The strongest videos end with a single action customers can take instantly.</p>
-          </div>
-        </div>
-        <p class="ds-caption proof-note">Build creative for the way people actually watch: fast, curious, and ready to move when the story hits.</p>
-      </div>
-    </section>
-
-    <section id="cta" class="ds-section ds-cta-band panel-white section-frame" aria-labelledby="cta-title">
-      <div class="ds-container cta-stack">
-        <div class="cta-copy ds-stack">
-          <span class="ds-chip" aria-label="Section label">Ready to launch</span>
-          <h2 id="cta-title" class="ds-h2">Your next customer could be one video away.</h2>
-          <p class="ds-body-text">Make the scroll work harder. Launch bold creative, test what lands, and turn quick views into real business.</p>
-        </div>
-        <div class="cta-actions ds-actions" aria-label="Closing calls to action">
-          <a href="#" class="ds-btn ds-btn-primary" aria-label="Create a TikTok for Business campaign now">Create your campaign</a>
-          <a href="#" class="ds-btn ds-btn-ghost" aria-label="Talk to a TikTok business expert">Talk to sales</a>
-        </div>
-        <div class="cta-accent-row" aria-hidden="true">
-          <div class="ds-bubble-cluster"></div>
         </div>
       </div>
-    </section>
-  </main>
+    </div>
+  </section>
 </body>
 </html>

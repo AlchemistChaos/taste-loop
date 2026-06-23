@@ -734,8 +734,10 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
       `full-bleed accent band or figure border, NEVER on text). The hero headline is OVERSIZED and breaks the ` +
       `grid, with exactly ONE word wrapped in .ds-emph (Razzmatazz). BRACKET the hero H1 with TWO emphasis marks ` +
       `(.ds-mark) in DIFFERENT brand colors — e.g. a .ds-mark.ds-mark-cross.ds-mark-splash span before it and a ` +
-      `.ds-mark.ds-mark-chevron.ds-mark-razz span after (square bracket ONLY at a sentence end). Use .ds-bubble-cluster ` +
-      `overlapping circles AND at least one .ds-pattern dot band (never under text) as recurring accents. Every image is a real .ds-figure media frame (rounded 25%/50%, optional ` +
+      `.ds-mark.ds-mark-chevron.ds-mark-razz span after (square bracket ONLY at a sentence end). Use at least one ` +
+      `.ds-pattern dot band (never under text) as a recurring accent. NOTE: .ds-bubble-cluster is DECORATIVE overlapping ` +
+      `CIRCLES ONLY (it must contain .ds-bubble-primary/-secondary/-ink circles, NEVER word-bubbles or text) and is NOT ` +
+      `for the hero; .ds-bubble-text pills are the standalone word/CTA holders. Every image is a real .ds-figure media frame (rounded 25%/50%, optional ` +
       `10° rotation) — NEVER a bare rectangle or grey placeholder. Generous 96px/128px section padding. NO ` +
       `gradients, NO drop shadows; create depth with layered flat shapes only.\n` +
       `\nBuild a single self-contained responsive HTML5 page with EXACTLY ${sectionCount} sections ` +
