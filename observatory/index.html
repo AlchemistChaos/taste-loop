@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agent Observatory</title>
+<style>
+  :root { --razz:#FE2C55; --splash:#25F4EE; --bg:#0a0a0f; --panel:#14141c; --panel2:#1c1c28; --line:#2a2a3a; --fg:#e8e8f0; --dim:#8a8aa0; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  header { display:flex; align-items:center; gap:12px; padding:12px 18px; border-bottom:1px solid var(--line); background:linear-gradient(90deg,#14141c,#0a0a0f); }
+  header h1 { font-size:15px; margin:0; letter-spacing:.5px; }
+  header .dot { width:9px; height:9px; border-radius:50%; background:var(--splash); box-shadow:0 0 10px var(--splash); }
+  .wrap { display:grid; grid-template-columns:300px 1fr; height:calc(100vh - 49px); }
+  /* left: workflow list */
+  aside { border-right:1px solid var(--line); overflow:auto; background:var(--panel); }
+  .wf { padding:11px 16px; border-bottom:1px solid var(--line); cursor:pointer; }
+  .wf:hover { background:var(--panel2); }
+  .wf.active { background:var(--panel2); border-left:3px solid var(--razz); }
+  .wf .name { font-weight:600; color:var(--fg); word-break:break-word; }
+  .wf .meta { color:var(--dim); font-size:11px; margin-top:3px; }
+  /* main */
+  main { overflow:auto; padding:18px 22px; }
+  .phase { margin-bottom:26px; }
+  .phase h2 { font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--splash); margin:0 0 12px; border-bottom:1px solid var(--line); padding-bottom:6px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; cursor:pointer; transition:border-color .2s; }
+  .card:hover { border-color:#3a3a50; }
+  .card.running { border-color:var(--splash); animation:pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(37,244,238,.0)} 50%{box-shadow:0 0 0 3px rgba(37,244,238,.15)} }
+  .card .top { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .card .label { font-weight:700; color:var(--fg); }
+  .badge { font-size:10px; padding:2px 7px; border-radius:20px; font-weight:700; }
+  .badge.running { background:rgba(37,244,238,.15); color:var(--splash); }
+  .badge.done { background:rgba(120,255,160,.12); color:#7bef9e; }
+  .chips { display:flex; flex-wrap:wrap; gap:5px; margin-top:9px; }
+  .chip { font-size:10px; padding:2px 7px; border-radius:5px; background:var(--panel2); color:var(--dim); border:1px solid var(--line); }
+  .chip b { color:var(--razz); }
+  .card .stat { color:var(--dim); font-size:11px; margin-top:8px; }
+  /* expanded detail */
+  .detail { display:none; margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
+  .card.open .detail { display:block; }
+  .detail h3 { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--splash); margin:12px 0 5px; }
+  .detail h3:first-child { margin-top:0; }
+  pre.prompt, pre.output { white-space:pre-wrap; word-break:break-word; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:9px; max-height:280px; overflow:auto; color:#cfd; font-size:11.5px; }
+  pre.output { color:#dfe; }
+  .timeline { list-style:none; margin:0; padding:0; max-height:300px; overflow:auto; }
+  .timeline li { display:flex; gap:8px; padding:3px 0; border-bottom:1px solid #1a1a24; }
+  .timeline .tname { color:var(--splash); font-weight:700; min-width:64px; }
+  .timeline .tsum { color:var(--dim); word-break:break-all; }
+  .empty { color:var(--dim); padding:40px; text-align:center; }
+</style>
+</head>
+<body>
+  <header>
+    <span class="dot"></span>
+    <h1>AGENT OBSERVATORY</h1>
+    <span id="hint" style="color:var(--dim);font-size:11px">live — watching workflow fan-outs</span>
+  </header>
+  <div class="wrap">
+    <aside id="list"></aside>
+    <main id="main"><div class="empty">Select a workflow on the left.</div></main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

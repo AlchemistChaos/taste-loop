@@ -8,17 +8,38 @@
 //   - each agent's INSTRUCTIONS (the actual brand-voiced prompt that agent runs on),
 //   - each agent's SKILLS/TOOLS (drawn from SKILL_PALETTE).
 //
+// MEMORY-AWARE MASTER (Invariant 2): on the memory studio the master is handed the
+// traces/lessons recalled from EARLIER TURNS IN THIS RUN and decides the roster +
+// per-agent tools FROM them — so the *team* improves turn-over-turn, not just the
+// page. The lesson->capability reasoning lives in the master PROMPT (not a regex
+// ladder): a contrast lesson makes the master field contrast_check, an imagery
+// lesson makes it grant image_gen, etc. repairTeam is only a thin invariant guard.
+//
 // This is the authoring brain. It is NOT cosmetic: the orchestrator spawns exactly
 // these agents and every one runs its master-authored instructions with its granted
 // tools to produce REAL output.
 //
 // Frozen exports (other modules import this exact shape):
 //   export const ROLE_PALETTE   : string[]
-//   export const SKILL_PALETTE  : string[]   // ["html_build","svg_image","cognee_recall","cognee_trace","brand_tokens"] — NO web_search
-//   export async function planTeam({brand, goal, isMemory, lessons}) -> {
+//   export const SKILL_PALETTE  : string[]   // DERIVED from skills.mjs TOOL_PALETTE
+//                                             // (the single registry source of truth) — NO
+//                                             // brand_tokens, NO web_search.
+//   export async function planTeam({brand, goal, isMemory, lessons, credit}) -> {
 //     strategy: string,
-//     agents: [{ id, role, instructions, tools:string[], produces:string }]
+//     agents: [{ id, role, instructions, tools:string[], produces:string,
+//                briefV1:string, briefV2:string,
+//                credit?:{flaw,attributedTo}, grantProvenance?:[{skill,fromLesson}] }]
 //   }
+//   - briefV1 = the agent's brief WITHOUT any recalled lesson woven in (the "before").
+//   - briefV2 = the agent's brief AS AUTHORED/woven (the "after"; === instructions).
+//     Stored at author time so the orchestrator reads the prompt-diff directly
+//     (no regex reconstruction). On the no-memory studio briefV1 === briefV2.
+//   - credit (2.4) = { flaw, attributedTo } — the highest-severity flaw this role was
+//     blamed for LAST turn, seeded verbatim into briefV2 so the role must fix it this
+//     turn. Memory studio only (credit is {} on the no-memory studio -> never set).
+//   - grantProvenance (2.3) = [{ skill, fromLesson }] — which recalled lesson motivated
+//     granting which tool. Master-authored (validated) or deterministically derived.
+//     Memory studio only; undefined on no-memory and under ablation.
 //
 // Guarantees enforced by validate/repair (so the orchestrator never has to
 // defend against a bad master output):
@@ -26,12 +47,14 @@
 //   - at least one agent with produces === "critique"
 //   - every tool is from SKILL_PALETTE (unknown tools dropped)
 //   - roster capped at 7 agents, deduped ids
-//   - MEMORY studio: recalled lessons woven into the relevant agents'
-//     instructions, and cognee_recall/cognee_trace granted where they fit
+//   - FAIRNESS: the ONLY memory-exclusive tools are {cognee_recall, cognee_trace};
+//     they appear ONLY on the memory studio. Every other capability is symmetric.
 //
-// Plain ESM, Node 18+, no npm deps. Uses ollama.chatJSON (frozen).
+// Plain ESM, Node 18+, no npm deps. Uses ollama.chatJSON (frozen) and derives the
+// skill palette from skills.mjs TOOL_PALETTE (frozen).
 
 import { chatJSON } from "./ollama.mjs";
+import { TOOL_PALETTE } from "./skills.mjs";
 
 // ---------------------------------------------------------------------------
 // Palettes
@@ -52,21 +75,16 @@ export const ROLE_PALETTE = [
   "brand-guardian",      // memory studio: enforces recalled, checkable brand rules
 ];
 
-// The tools the master may grant. NO web_search by design — the studio works from
-// the brand book + memory, not the open web.
-export const SKILL_PALETTE = [
-  "html_build",     // build the real HTML page (Codex gpt-5.4)
-  "svg_image",      // author inline SVG / source on-brand imagery
-  "cognee_recall",  // recall prior-run lessons / in-run traces from memory
-  "cognee_trace",   // write findings back into memory as traces
-  "brand_tokens",   // read the BrandSpec tokens (colors/fonts/dos/donts)
-  // Real, grantable capabilities the executor will ACTUALLY run. A recalled
-  // lesson that implies one of these MUST cause the master to grant it.
-  "image_gen",      // generate an on-brand hero image (returns a data URI to embed)
-  "a11y_check",     // run a real accessibility check on the built page
-  "contrast_check", // parse colors and flag low-contrast text/bg pairs
-  "copy_lint",      // flag banned business buzzwords in the copy
-];
+// The tools the master may grant. DERIVED from the skills.mjs SKILL_REGISTRY source
+// of truth (the live TOOL_PALETTE export) so the master can never grant a chip that
+// the executor can't actually run, and so no parallel literal palette drifts. There
+// is deliberately NO web_search and NO brand_tokens (brand grounding flows via the
+// build channel, not a tool).
+export const SKILL_PALETTE = Object.freeze(Object.keys(TOOL_PALETTE));
+
+// Short, master-facing description for every grantable skill — sourced from the
+// SAME registry so the prompt text can never claim a capability the executor lacks.
+const SKILL_DESCRIPTIONS = TOOL_PALETTE;
 
 const SKILL_SET = new Set(SKILL_PALETTE);
 const ROLE_SET = new Set(ROLE_PALETTE);
@@ -78,7 +96,9 @@ const MIN_AGENTS = 3;
 // studio, and they must be dropped from a no-memory roster during repair.
 const MEMORY_ONLY_ROLES = new Set(["brand-guardian"]);
 
-// Memory tools — only valid on the memory studio.
+// Memory tools — the ONLY memory-exclusive bundle (Invariant 4). Valid ONLY on the
+// memory studio; the fairness guard strips them from any no-memory roster. Every
+// OTHER skill in SKILL_PALETTE is a neutral capability available to BOTH studios.
 const MEMORY_TOOLS = new Set(["cognee_recall", "cognee_trace"]);
 
 // ---------------------------------------------------------------------------
@@ -100,22 +120,19 @@ function masterSystemPrompt({ isMemory }) {
     "ALLOWED ROLES (use ONLY these names):",
     JSON.stringify(ROLE_PALETTE),
     "",
-    "ALLOWED TOOLS (grant ONLY these; there is deliberately NO web search — work from the brand book and memory):",
-    JSON.stringify(SKILL_PALETTE),
-    "  - html_build: build the real, self-contained HTML page. Grant to your builder.",
-    "  - svg_image: author inline SVG or source on-brand imagery.",
-    "  - cognee_recall: recall lessons learned in prior runs and traces within this run.",
-    "  - cognee_trace: write findings/decisions back into memory.",
-    "  - brand_tokens: read the BrandSpec tokens (exact colors, fonts, dos/donts).",
-    "  - image_gen: generate an on-brand hero IMAGE (a data URI the builder embeds). Grant when a lesson or the brief calls for stronger/on-brand imagery.",
-    "  - a11y_check: run a REAL accessibility check on the built page (alt text, button/aria, lang). Grant to the auditor/builder when a lesson concerns accessibility.",
-    "  - contrast_check: parse colors and flag low-contrast text/bg pairs. Grant when a lesson concerns contrast, legibility, or accent-on-CTA.",
-    "  - copy_lint: flag banned business buzzwords/jargon in the copy. Grant when a lesson concerns voice/jargon/buzzwords.",
+    "ALLOWED TOOLS (grant ONLY these; there is deliberately NO web search and NO brand-token tool — work from",
+    "the brand book in this brief and, on the memory studio, from the recalled in-run traces):",
+    ...SKILL_PALETTE.map((name) => `  - ${name}: ${SKILL_DESCRIPTIONS[name]}`),
     "",
-    "TOOLS ARE REAL CAPABILITIES, NOT LABELS. When a recalled lesson implies a capability, GRANT that agent the",
-    "matching tool from the palette, not just mention it in prose. Examples: a contrast/accessibility lesson ->",
-    "GRANT a11y_check and/or contrast_check to the auditor; an imagery/visual lesson -> GRANT image_gen to the",
-    "builder or image-sourcer; a voice/jargon/buzzword lesson -> GRANT copy_lint to the copywriter or critique.",
+    "TOOLS ARE REAL CAPABILITIES, NOT LABELS. Read the recalled lessons (memory studio) and the brief, then",
+    "GRANT the matching tool to the agent who can act on it — do not merely mention it in prose. Reason it",
+    "through yourself; there is no automatic backstop that will add tools for you. Examples:",
+    "  - a contrast / legibility / accent-on-CTA lesson -> GRANT contrast_check (and a11y_check) to the auditor;",
+    "  - an accessibility / alt-text / aria / focus-state lesson -> GRANT a11y_check to the auditor or builder;",
+    "  - a voice / jargon / buzzword lesson -> GRANT copy_lint to the copywriter or critique;",
+    "  - a weak / generic / off-brand imagery lesson -> GRANT image_gen to the builder or image-sourcer.",
+    "If a recalled lesson implies a capability and you do NOT field an agent holding the matching tool, the page",
+    "will repeat the mistake — so let the recalled memory reshape BOTH the roster and the per-agent toolsets.",
     "",
     "HARD REQUIREMENTS for the roster you return:",
     '  1. EXACTLY ONE agent must have produces == "html" and be granted the "html_build" tool. This is the',
@@ -127,26 +144,41 @@ function masterSystemPrompt({ isMemory }) {
     "",
     isMemory
       ? [
-          "THIS STUDIO HAS MEMORY. You will be given LESSONS recalled from prior runs. You MUST weave each",
-          "recalled lesson, verbatim and non-negotiable, into the instructions of the agents who can act on it",
-          "(typically the builder, the visual-designer, and a brand-guardian/critique). Grant cognee_recall to",
-          "agents that should consult memory and cognee_trace to agents that should record findings. Consider",
-          'fielding a "brand-guardian" whose entire brief is to enforce the recalled, checkable brand rules.',
+          "THIS STUDIO HAS MEMORY. You will be given LESSONS recalled from EARLIER TURNS IN THIS RUN. You MUST",
+          "weave each recalled lesson, verbatim and non-negotiable, into the instructions of the agents who can",
+          "act on it (typically the builder, the visual-designer, and a brand-guardian/critique), AND grant the",
+          "tool each lesson implies (above). Grant cognee_recall to agents that should consult the run's memory",
+          "and cognee_trace to agents that should record findings. Consider fielding a \"brand-guardian\" whose",
+          "entire brief is to enforce the recalled, checkable brand rules. Let the recalled memory visibly shape",
+          "WHO you field and WHAT they hold — that is this studio's advantage over the no-memory studio.",
+          "PROVENANCE: for each tool you grant BECAUSE of a recalled lesson, add a grantProvenance entry on that",
+          "agent naming the tool (skill) and quoting that lesson VERBATIM (fromLesson). Only include entries whose",
+          "skill you actually granted and whose lesson is one of the recalled lessons above.",
         ].join(" ")
       : [
-          "THIS STUDIO HAS NO MEMORY. It has learned nothing from prior runs. Do NOT grant cognee_recall or",
-          'cognee_trace, and do NOT field a "brand-guardian". Plan a strong team from first principles only.',
+          "THIS STUDIO HAS NO MEMORY. It carries nothing between turns and has no recalled traces to learn from.",
+          "Do NOT grant cognee_recall or cognee_trace, and do NOT field a \"brand-guardian\". Plan a strong team",
+          "from first principles for this turn.",
         ].join(" "),
     "",
     "Return ONLY valid JSON, no prose, no markdown fences, in EXACTLY this shape:",
     "{",
-    '  "strategy": "<one concrete sentence describing the build approach for this page>",',
+    '  "strategy": "<one concrete sentence describing the build approach for this page' +
+      (isMemory ? " AND how the recalled memory shaped this team" : "") + '>",',
     '  "agents": [',
     "    {",
     '      "role": "<one of the allowed roles>",',
     '      "instructions": "<the real, specific, brand-voiced prompt this agent runs on>",',
     '      "tools": ["<allowed tool>", ...],',
-    '      "produces": "<short noun for the artifact this agent yields, e.g. brandspec|copy|layout|html|critique|imagery|ia|typescale>"',
+    '      "produces": "<short noun for the artifact this agent yields, e.g. brandspec|copy|layout|html|critique|imagery|ia|typescale>"' +
+      (isMemory
+        ? ','
+        : ''),
+    ...(isMemory
+      ? [
+          '      "grantProvenance": [{ "skill": "<one granted tool>", "fromLesson": "<the recalled lesson, verbatim, that made you grant it>" }]',
+        ]
+      : []),
     "    }",
     "    // ...3 to 7 agents",
     "  ]",
@@ -161,12 +193,14 @@ function masterUserPrompt({ brand, goal, isMemory, lessons }) {
   const lessonBlock = (isMemory && lessons && lessons.length)
     ? [
         "",
-        `RECALLED LESSONS from memory (${lessons.length}) — these were learned the hard way and MUST be`,
-        "woven verbatim into the instructions of the agents who can enforce them:",
+        `RECALLED LESSONS from EARLIER TURNS IN THIS RUN (${lessons.length}) — these were learned this run and`,
+        "MUST be woven verbatim into the instructions of the agents who can enforce them, AND must drive which",
+        "tools you grant (a contrast lesson -> contrast_check on the auditor, an imagery lesson -> image_gen on",
+        "the builder, etc.):",
         ...lessons.map((l, i) => `  ${i + 1}. ${typeof l === "string" ? l : (l.statement || "")}`),
       ].join("\n")
     : (isMemory
-        ? "\nRECALLED LESSONS from memory: (none yet — this is the first generation). Plan a strong first-pass team."
+        ? "\nRECALLED LESSONS from EARLIER TURNS IN THIS RUN: (none yet — this is the first turn of the run). Plan a strong first-pass team."
         : "");
 
   return [
@@ -183,7 +217,7 @@ function masterUserPrompt({ brand, goal, isMemory, lessons }) {
     lessonBlock,
     "",
     isMemory
-      ? "Author the MEMORY studio's team now. Make memory its visible advantage: weave the recalled lessons into the right briefs and wire up cognee_recall/cognee_trace."
+      ? "Author the MEMORY studio's team now. Make memory its visible advantage: weave the recalled lessons into the right briefs, GRANT the tool each lesson implies, and wire up cognee_recall/cognee_trace. Name in `strategy` how the recalled memory reshaped this team."
       : "Author the NO-MEMORY studio's team now. Strong first-principles briefs only — no memory tools.",
   ].join("\n");
 }
@@ -197,7 +231,7 @@ function asString(v) {
 }
 
 // Coerce a tools value into a clean array of allowed tools (memory tools stripped
-// for no-memory studios).
+// for no-memory studios — the fairness invariant).
 function cleanTools(raw, { isMemory }) {
   let arr = [];
   if (Array.isArray(raw)) arr = raw;
@@ -205,8 +239,8 @@ function cleanTools(raw, { isMemory }) {
   const out = [];
   for (const t of arr) {
     const tool = asString(t);
-    if (!SKILL_SET.has(tool)) continue;
-    if (!isMemory && MEMORY_TOOLS.has(tool)) continue;
+    if (!SKILL_SET.has(tool)) continue;            // unknown / dropped (e.g. brand_tokens)
+    if (!isMemory && MEMORY_TOOLS.has(tool)) continue; // fairness: no memory tool on no-memory
     if (!out.includes(tool)) out.push(tool);
   }
   return out;
@@ -214,102 +248,94 @@ function cleanTools(raw, { isMemory }) {
 
 // Default instructions for a role, used only when the model omits/blanks one
 // during repair. Brand-voiced so even repaired agents carry real direction.
-function defaultInstructions(role, { brand, goal, lessons, isMemory }) {
+// IMPORTANT: this returns the LESSON-FREE brief (the canonical briefV1). Lesson
+// weaving is the single responsibility of weaveLessons() in repair step 5/7, which
+// produces briefV2 — so the stored v1->v2 prompt-diff is always honest.
+function defaultInstructions(role, { brand, goal }) {
   const c = brand?.colors || {};
   const tone = Array.isArray(brand?.tone) ? brand.tone.join(", ") : String(brand?.tone || "");
   const donts = JSON.stringify(brand?.dont || []);
-  const lessonTail = (isMemory && lessons && lessons.length)
-    ? ` Apply these learned rules verbatim, non-negotiable: ${lessons.map((l) => (typeof l === "string" ? l : l.statement)).filter(Boolean).join("; ")}.`
-    : "";
   switch (role) {
     case "brand-deconstruct":
       return `Load and interpret the TikTok BrandSpec. Surface the exact palette (${c.primary}/${c.accent} on ${c.bg}), the approved fonts, the ${tone} tone, and the hard DON'Ts ${donts} so every downstream agent works from the real tokens.`;
     case "copywriter":
-      return `Write bold, ${tone} marketing copy for "${goal}". Punchy hero headline, scannable section copy, real CTAs — no lorem, no jargon. Speak directly to ${brand?.audience || "the audience"}.${lessonTail}`;
+      return `Write bold, ${tone} marketing copy for "${goal}". Punchy hero headline, scannable section copy, real CTAs — no lorem, no jargon. Speak directly to ${brand?.audience || "the audience"}.`;
     case "info-architect":
-      return `Order the page sections ${JSON.stringify(brand?.sections || [])} for maximum conversion: hook fast, prove value, drive to one primary CTA. Justify the flow in one line per section.${lessonTail}`;
+      return `Order the page sections ${JSON.stringify(brand?.sections || [])} for maximum conversion: hook fast, prove value, drive to one primary CTA. Justify the flow in one line per section.`;
     case "typographer":
-      return `Set a confident type scale using only the approved fonts (heading "${brand?.fonts?.heading}", body "${brand?.fonts?.body}"). Big, dominant headlines; comfortable body; clear hierarchy. Respect the DON'Ts ${donts}.${lessonTail}`;
+      return `Set a confident type scale using only the approved fonts (heading "${brand?.fonts?.heading}", body "${brand?.fonts?.body}"). Big, dominant headlines; comfortable body; clear hierarchy. Respect the DON'Ts ${donts}.`;
     case "visual-designer":
-      return `Art-direct an on-brand layout using FLAT brand-color blocks only (${c.primary}/${c.accent} on ${c.bg}/${c.fg}). Strong hierarchy, generous whitespace, the primary CTA visually dominant. Obey the DON'Ts ${donts} exactly.${lessonTail}`;
+      return `Art-direct an on-brand layout using FLAT brand-color blocks only (${c.primary}/${c.accent} on ${c.bg}/${c.fg}). Strong hierarchy, generous whitespace, the primary CTA visually dominant. Obey the DON'Ts ${donts} exactly.`;
     case "frontend-implementer":
-      return `Build a single self-contained, responsive HTML5 page with exactly 5 sections (${JSON.stringify(brand?.sections || [])}) for "${goal}". Use the real brand tokens (colors ${c.primary}/${c.accent}, fonts ${brand?.fonts?.heading}), flat color blocks only, real on-brand copy, strong hierarchy, and prominent CTAs. Obey every DON'T: ${donts}.${lessonTail}`;
+      return `Build a single self-contained, responsive HTML5 page with exactly 5 sections (${JSON.stringify(brand?.sections || [])}) for "${goal}". Use the real brand tokens (colors ${c.primary}/${c.accent}, fonts ${brand?.fonts?.heading}), flat color blocks only, real on-brand copy, strong hierarchy, and prominent CTAs. Obey every DON'T: ${donts}.`;
     case "image-sourcer":
-      return `Provide on-brand imagery or inline SVG that reinforces the ${tone} voice — no generic AI stock, no off-palette colors. Keep visuals flat and aligned to ${c.primary}/${c.accent}.${lessonTail}`;
+      return `Provide on-brand imagery or inline SVG that reinforces the ${tone} voice — no generic AI stock, no off-palette colors. Keep visuals flat and aligned to ${c.primary}/${c.accent}.`;
     case "critique":
-      return `Brutally audit the built page against the brand rules. List concrete, actionable violations — especially any breach of the DON'Ts ${donts}. Be specific and unforgiving; flag anything off-brand.${lessonTail}`;
+      return `Brutally audit the built page against the brand rules. List concrete, actionable violations — especially any breach of the DON'Ts ${donts}. Be specific and unforgiving; flag anything off-brand.`;
     case "brand-guardian":
-      return `Enforce the recalled, checkable brand rules on the built page. Verify each learned rule is satisfied and reject the page if any is broken.${lessonTail || " Apply the studio's learned brand rules."}`;
+      return `Enforce the checkable brand rules on the built page. Verify each rule is satisfied and reject the page if any is broken.`;
     default:
-      return `Contribute on-brand work toward "${goal}" using the brand tokens (${c.primary}/${c.accent}, ${tone}) and obeying the DON'Ts ${donts}.${lessonTail}`;
+      return `Contribute on-brand work toward "${goal}" using the brand tokens (${c.primary}/${c.accent}, ${tone}) and obeying the DON'Ts ${donts}.`;
   }
 }
 
 // Weave recalled lessons into an instruction string if they aren't already
-// referenced. Used for the memory studio's actionable agents.
+// referenced. Used for the memory studio's actionable agents. Returns the woven
+// instruction (the "v2"/after brief).
 function weaveLessons(instructions, lessons) {
   if (!lessons || !lessons.length) return instructions;
-  const statements = lessons
-    .map((l) => (typeof l === "string" ? l : (l && l.statement) || ""))
-    .map((s) => asString(s))
-    .filter(Boolean);
+  const statements = lessonStatements(lessons);
   if (!statements.length) return instructions;
   const lower = String(instructions || "").toLowerCase();
   const missing = statements.filter((s) => !lower.includes(s.toLowerCase().slice(0, Math.min(24, s.length))));
   if (!missing.length) return instructions;
-  const tail = ` LEARNED RULES (from memory — apply verbatim, non-negotiable): ${missing.join("; ")}.`;
+  const tail = ` LEARNED RULES (from earlier turns this run — apply verbatim, non-negotiable): ${missing.join("; ")}.`;
   return `${asString(instructions)}${tail}`;
 }
 
-// ---------------------------------------------------------------------------
-// Lesson -> SKILL GRANT mapping. A recalled lesson must change an agent's
-// TOOLSET, not only its prompt. Each rule matches lesson text and yields the
-// real capability to grant + the roles that should receive it (in preference
-// order). This is the deterministic backbone behind the master prompt's
-// "GRANT the matching tool" instruction.
-// ---------------------------------------------------------------------------
-const LESSON_SKILL_RULES = [
-  {
-    skill: "contrast_check",
-    test: /contrast|legib|low[-\s]?contrast|accent.*(cta|button|link)|(cta|button|link).*accent|#25f4ee|readab/i,
-    roles: ["critique", "brand-guardian", "visual-designer", "frontend-implementer"],
-  },
-  {
-    skill: "a11y_check",
-    test: /a11y|accessib|alt text|aria|screen reader|wcag|focus state|tab order/i,
-    roles: ["critique", "brand-guardian", "frontend-implementer"],
-  },
-  {
-    skill: "copy_lint",
-    test: /buzzword|jargon|business[-\s]?speak|voice|revolutionary|cutting[-\s]?edge|game[-\s]?chang|synergy|leverage/i,
-    roles: ["copywriter", "critique", "brand-guardian"],
-  },
-  {
-    skill: "image_gen",
-    test: /imager|image|hero (visual|image|shot)|photo|illustration|stock|visual.*(weak|generic|off[-\s]?brand)/i,
-    roles: ["image-sourcer", "frontend-implementer", "visual-designer"],
-  },
-];
-
-// Given the recalled lessons, return [{skill, roles}] for every capability they
-// imply. De-duped by skill (first matching lesson wins the role preference).
-function lessonSkillGrants(lessons) {
-  if (!Array.isArray(lessons) || !lessons.length) return [];
-  const texts = lessons
+// Collect recalled lesson statements as clean, non-empty strings (verbatim). Used by
+// weaveLessons() and the grantProvenance derivation so they agree on what a "lesson" is.
+function lessonStatements(lessons) {
+  if (!Array.isArray(lessons)) return [];
+  return lessons
     .map((l) => (typeof l === "string" ? l : (l && l.statement) || ""))
+    .map((s) => asString(s))
     .filter(Boolean);
-  const grants = [];
-  const seen = new Set();
-  for (const text of texts) {
-    for (const rule of LESSON_SKILL_RULES) {
-      if (seen.has(rule.skill)) continue;
-      if (rule.test.test(text)) {
-        grants.push({ skill: rule.skill, roles: rule.roles });
-        seen.add(rule.skill);
-      }
-    }
+}
+
+// Seed the responsible agent's brief with its OWN prior miss (2.2). Appends a verbatim
+// miss clause to the instruction string (mirrors weaveLessons) when not already present,
+// so briefV2 grows and the prompt-diff naturally reflects the credit seeding. Returns
+// the seeded instruction (the new "v2"/after brief).
+function seedCredit(instructions, miss) {
+  const flaw = asString(miss && miss.flaw);
+  if (!flaw) return instructions;
+  const lower = String(instructions || "").toLowerCase();
+  if (lower.includes(flaw.toLowerCase())) return instructions; // idempotent
+  const sev = asString(miss.severity) || "med";
+  const tail =
+    ` LAST TURN this role was attributed the flaw: "${flaw}" (severity ${sev})` +
+    ` — you MUST fix it this turn.`;
+  return `${asString(instructions)}${tail}`;
+}
+
+// Apply the credit seed for one agent (2.2): if this agent's role was blamed last
+// turn, grow its briefV2/instructions with the verbatim miss clause and attach the
+// per-agent credit = {flaw, attributedTo}. Idempotent + memory-only (credit is {} on
+// the no-memory/ablate path, so nothing happens there). Keeps briefDiff honest: when
+// seeding grows the brief it (re)sets before=briefV1, after=current instructions.
+function seedAgentCredit(a, credit, isMemory) {
+  if (!isMemory) return;                                // fairness belt-and-suspenders
+  const miss = credit && typeof credit === "object" ? credit[a.role] : null;
+  if (!miss || !asString(miss.flaw)) return;
+  const seeded = seedCredit(a.instructions, miss);
+  if (seeded !== a.instructions) {
+    a.instructions = seeded;
+    a.briefV2 = seeded;
+    // The prompt-diff reflects credit seeding too (before is the lesson-free v1).
+    a.briefDiff = { before: a.briefV1, after: seeded };
   }
-  return grants;
+  a.credit = { flaw: asString(miss.flaw), attributedTo: a.role };
 }
 
 // Roles whose briefs should carry the recalled lessons on the memory studio.
@@ -321,17 +347,70 @@ const LESSON_BEARING_ROLES = new Set([
   "copywriter",
 ]);
 
-// Validate + repair the master's raw JSON into the guaranteed contract shape.
+// Validate / derive an agent's grantProvenance (2.3). Memory studio + non-empty lessons
+// only — returns undefined otherwise (so the field stays absent on no-memory/ablate).
+//   grantProvenance = [{ skill, fromLesson }] — "this recalled lesson motivated this tool".
+// Primary: accept the master's OWN rawProv entries whose skill is in the agent's final
+//   tools AND whose fromLesson matches (case-insensitive substring) a recalled lesson
+//   statement — dropping any fabricated entry. NO regex over flaw text, NO rule table.
+// Fallback: when the master returned none but the agent holds a memory-implied
+//   (non-html_build) tool, synthesize ONE entry pairing that first tool with the FIRST
+//   recalled lesson statement (improve() feedback-ranks lessons so [0] is the proven one).
+function deriveGrantProvenance(agent, lessons) {
+  const statements = lessonStatements(lessons);
+  if (!statements.length) return undefined;
+  const tools = Array.isArray(agent.tools) ? agent.tools : [];
+  const toolSet = new Set(tools);
+  const lowerStatements = statements.map((s) => s.toLowerCase());
+
+  // Primary: validate the master-authored entries.
+  const validated = [];
+  if (Array.isArray(agent.rawProv)) {
+    for (const g of agent.rawProv) {
+      if (!g || typeof g !== "object") continue;
+      const skill = asString(g.skill);
+      const fromLesson = asString(g.fromLesson);
+      if (!skill || !fromLesson) continue;
+      if (!toolSet.has(skill)) continue;                    // must be a tool we granted
+      const fl = fromLesson.toLowerCase();
+      // fromLesson must match a recalled lesson (either direction of substring) so the
+      // master cannot quote a lesson that was never recalled.
+      const matched = lowerStatements.find((s) => s.includes(fl) || fl.includes(s));
+      if (!matched) continue;
+      // Store the recalled statement VERBATIM (canonical text), not the model's echo.
+      const canonical = statements[lowerStatements.indexOf(matched)];
+      if (!validated.some((v) => v.skill === skill && v.fromLesson === canonical)) {
+        validated.push({ skill, fromLesson: canonical });
+      }
+    }
+  }
+  if (validated.length) return validated;
+
+  // Fallback: pair the first non-html_build granted tool with the first lesson.
+  const firstTool = tools.find((t) => t !== "html_build");
+  if (firstTool) {
+    return [{ skill: firstTool, fromLesson: statements[0] }];
+  }
+  return undefined;
+}
+
+// Validate + repair the master's raw JSON into the guaranteed contract shape. This
+// is now a THIN INVARIANT GUARD only (Phase 2.2): it ensures >=1 html producer,
+// >=1 critique producer, valid tool names, the roster bounds, unique ids, and the
+// FAIRNESS invariant (memory tools only on the memory studio). It does NOT do
+// lesson->skill keyword matching — that reasoning lives in the master prompt.
 function repairTeam(raw, ctx) {
-  const { brand, goal, isMemory, lessons } = ctx;
+  const { isMemory, lessons, credit } = ctx;
   const strategy = asString(raw && raw.strategy) ||
     (isMemory
-      ? "Apply the recalled brand lessons and ship a flat, on-brand, high-converting TikTok page."
+      ? "Apply the lessons recalled from earlier turns this run and ship a flat, on-brand, high-converting TikTok page."
       : "Ship a bold, flat, on-brand high-converting TikTok marketing page from first principles.");
 
   let agents = Array.isArray(raw && raw.agents) ? raw.agents : [];
 
-  // 1) Coerce each agent; drop ones with an unknown role.
+  // 1) Coerce each agent; drop ones with an unknown role. Capture briefV1 (the
+  //    master-authored brief BEFORE any lesson weaving) and briefV2 (after weaving)
+  //    at author time so the orchestrator reads the prompt-diff directly.
   const cleaned = [];
   const seenRoles = new Set();
   for (const a of agents) {
@@ -347,7 +426,13 @@ function repairTeam(raw, ctx) {
     let tools = cleanTools(a.tools, { isMemory });
     let produces = asString(a.produces).toLowerCase();
 
-    cleaned.push({ role, instructions, tools, produces });
+    // Stash the master's RAW grantProvenance (2.3 primary) for validation in step 5b,
+    // once tools are final. Only the array shape is carried here; validation is later.
+    const rawProv = Array.isArray(a.grantProvenance) ? a.grantProvenance : null;
+
+    // briefV1 = the authored brief as-is (no lessons woven yet); briefV2 filled in
+    // step 5 once weaving has run. On the no-memory studio they stay identical.
+    cleaned.push({ role, instructions, tools, produces, briefV1: instructions, briefV2: instructions, rawProv });
     seenRoles.add(role);
   }
 
@@ -357,11 +442,14 @@ function repairTeam(raw, ctx) {
     // promote an existing frontend-implementer, else add one
     htmlAgent = cleaned.find((a) => a.role === "frontend-implementer");
     if (!htmlAgent) {
+      const instr = defaultInstructions("frontend-implementer", ctx);
       htmlAgent = {
         role: "frontend-implementer",
-        instructions: defaultInstructions("frontend-implementer", ctx),
+        instructions: instr,
         tools: [],
         produces: "html",
+        briefV1: instr,
+        briefV2: instr,
       };
       cleaned.push(htmlAgent);
       seenRoles.add("frontend-implementer");
@@ -373,11 +461,14 @@ function repairTeam(raw, ctx) {
   // 3) Ensure a critique agent exists.
   let critAgent = cleaned.find((a) => a.produces === "critique" || a.role === "critique");
   if (!critAgent) {
+    const instr = defaultInstructions("critique", ctx);
     critAgent = {
       role: "critique",
-      instructions: defaultInstructions("critique", ctx),
+      instructions: instr,
       tools: [],
       produces: "critique",
+      briefV1: instr,
+      briefV2: instr,
     };
     cleaned.push(critAgent);
     seenRoles.add("critique");
@@ -403,48 +494,36 @@ function repairTeam(raw, ctx) {
     if (!a.produces) a.produces = PRODUCES_BY_ROLE[a.role] || "work";
   }
 
-  // 5) Memory studio: weave lessons into lesson-bearing briefs and grant memory
-  //    tools where they fit; no-memory studio: strip any memory tool leakage.
+  // 5) Memory studio: weave lessons into lesson-bearing briefs (briefV1 stays the
+  //    pre-weave authored brief; briefV2/instructions carry the woven lesson). Grant
+  //    cognee_recall/cognee_trace where they fit. The lesson->capability TOOL
+  //    reasoning is the master's job (in the prompt); repair no longer infers it.
+  //    No-memory studio: strip any memory-tool leakage (fairness invariant).
   for (const a of cleaned) {
     if (isMemory) {
       if (LESSON_BEARING_ROLES.has(a.role)) {
-        a.instructions = weaveLessons(a.instructions, lessons);
+        const woven = weaveLessons(a.instructions, lessons);
+        a.instructions = woven;
+        a.briefV2 = woven;
+        // Expose the v1->v2 prompt diff for the upskill panel; orchestrator backfills lessonId/lessonText.
+        a.briefDiff = { before: a.briefV1, after: woven };
       }
-      // the auditor/guardian should be able to consult memory
+      // 2.2 CREDIT SEED: if this role was blamed for a flaw last turn, append its OWN
+      //     miss to the brief (verbatim) so it must fix it this turn, and attach the
+      //     per-agent credit object app.js renderCredit consumes. credit is {} on the
+      //     no-memory/ablate/gen-0 path so this is inert there.
+      seedAgentCredit(a, credit, isMemory);
+      // the auditor/guardian should be able to consult this run's memory
       if ((a.role === "critique" || a.role === "brand-guardian") && lessons && lessons.length) {
         if (!a.tools.includes("cognee_recall")) a.tools.push("cognee_recall");
         if (!a.tools.includes("cognee_trace")) a.tools.push("cognee_trace");
       }
-      // the builder should recall what was learned before building
+      // the builder should recall what was learned earlier this run before building
       if (a.role === "frontend-implementer" && lessons && lessons.length) {
         if (!a.tools.includes("cognee_recall")) a.tools.push("cognee_recall");
       }
-      if (a.role === "brand-deconstruct" && !a.tools.includes("brand_tokens")) {
-        a.tools.push("brand_tokens");
-      }
     } else {
       a.tools = a.tools.filter((t) => !MEMORY_TOOLS.has(t));
-    }
-  }
-
-  // 5b) MEMORY studio: a recalled lesson must change an agent's TOOLSET, not only
-  //     its prompt. For every capability the lessons imply, GRANT the matching
-  //     skill to the best available agent (preferred role order). If none of the
-  //     preferred roles is on the roster, attach it to the critique/builder so
-  //     the capability is never silently dropped.
-  if (isMemory && lessons && lessons.length) {
-    for (const { skill, roles } of lessonSkillGrants(lessons)) {
-      // already granted to someone? skip.
-      if (cleaned.some((a) => a.tools.includes(skill))) continue;
-      let target = null;
-      for (const role of roles) {
-        target = cleaned.find((a) => a.role === role);
-        if (target) break;
-      }
-      // image_gen falls to the html builder (it threads the data URI to embed);
-      // all other checks fall to the critique auditor.
-      if (!target) target = (skill === "image_gen") ? htmlAgent : critAgent;
-      if (target && !target.tools.includes(skill)) target.tools.push(skill);
     }
   }
 
@@ -470,19 +549,52 @@ function repairTeam(raw, ctx) {
     for (const role of fillOrder) {
       if (roster.length >= MIN_AGENTS) break;
       if (seenRoles.has(role)) continue;
+      const instr = defaultInstructions(role, ctx);
       const a = {
         role,
-        instructions: defaultInstructions(role, ctx),
-        tools: role === "brand-deconstruct" ? ["brand_tokens"] : [],
+        instructions: instr,
+        tools: [],
         produces: PRODUCES_BY_ROLE[role] || "work",
+        briefV1: instr,
+        briefV2: instr,
       };
-      if (isMemory && LESSON_BEARING_ROLES.has(role)) a.instructions = weaveLessons(a.instructions, lessons);
+      if (isMemory && LESSON_BEARING_ROLES.has(role)) {
+        const woven = weaveLessons(a.instructions, lessons);
+        a.instructions = woven;
+        a.briefV2 = woven;
+        // Expose the v1->v2 prompt diff for the upskill panel; orchestrator backfills lessonId/lessonText.
+        a.briefDiff = { before: a.briefV1, after: woven };
+      }
+      // 2.2: a credited role added by backfill is still seeded with its prior miss.
+      seedAgentCredit(a, credit, isMemory);
       roster.push(a);
       seenRoles.add(role);
     }
   }
 
-  // 8) Assign stable, unique ids (role + ordinal for duplicate roles).
+  // 8) FAIRNESS ASSERTION (the structural A/B guard): the ONLY memory-exclusive
+  //    tools are {cognee_recall, cognee_trace}; they may appear ONLY on the memory
+  //    studio. On a no-memory roster NO agent may hold one. Every other tool is
+  //    symmetric. This belt-and-suspenders pass catches any leak from steps above.
+  if (!isMemory) {
+    for (const a of roster) {
+      a.tools = a.tools.filter((t) => !MEMORY_TOOLS.has(t));
+    }
+  }
+
+  // 8b) GRANT PROVENANCE (2.3): now that each agent's tools are FINAL, derive/validate
+  //     grantProvenance = [{skill, fromLesson}]. Memory studio + non-empty lessons only;
+  //     undefined on no-memory and under ablation (lessons is [] there). Then drop the
+  //     temporary rawProv scratch field so the returned agent shape stays clean.
+  for (const a of roster) {
+    if (isMemory && lessons && lessons.length) {
+      const prov = deriveGrantProvenance(a, lessons);
+      if (prov && prov.length) a.grantProvenance = prov;
+    }
+    if ("rawProv" in a) delete a.rawProv;
+  }
+
+  // 9) Assign stable, unique ids (role + ordinal for duplicate roles).
   const roleCounts = new Map();
   for (const a of roster) {
     const n = (roleCounts.get(a.role) || 0) + 1;
@@ -503,14 +615,26 @@ function repairTeam(raw, ctx) {
  * @param {Object} a.brand    BrandSpec from deconstructBrand()
  * @param {string} a.goal     product goal string
  * @param {boolean} a.isMemory whether this studio has memory
- * @param {Array<{statement:string}|string>} [a.lessons] recalled lessons (memory only)
- * @returns {Promise<{strategy:string, agents:Array<{id:string,role:string,instructions:string,tools:string[],produces:string}>}>}
+ * @param {Array<{statement:string}|string>} [a.lessons] traces/lessons recalled
+ *        from EARLIER TURNS IN THIS RUN (memory studio only)
+ * @param {Object<string,{flaw:string,attributedTo:string,severity:string}>} [a.credit]
+ *        per-role highest-severity flaw attributed LAST turn (memory studio only; {}
+ *        on no-memory / ablate / gen-0). Seeds the responsible agent's next-turn brief.
+ * @returns {Promise<{strategy:string, agents:Array<{id:string,role:string,instructions:string,tools:string[],produces:string,briefV1:string,briefV2:string,credit?:{flaw:string,attributedTo:string},grantProvenance?:Array<{skill:string,fromLesson:string}>}>}>}
  */
-export async function planTeam({ brand, goal, isMemory, lessons = [] } = {}) {
+export async function planTeam({ brand, goal, isMemory, lessons = [], credit = {} } = {}) {
   if (!brand || !brand.colors) throw new Error("planTeam: missing brand/colors");
   if (!goal) throw new Error("planTeam: missing goal");
 
-  const ctx = { brand, goal, isMemory: !!isMemory, lessons: Array.isArray(lessons) ? lessons : [] };
+  const ctx = {
+    brand,
+    goal,
+    isMemory: !!isMemory,
+    lessons: Array.isArray(lessons) ? lessons : [],
+    // 2.4: each role's highest-severity flaw attributed last turn. Already {} for
+    // no-memory / ablate / gen-0 (orchestrator gates it), so seeding is inert there.
+    credit: (credit && typeof credit === "object") ? credit : {},
+  };
 
   const messages = [
     { role: "system", content: masterSystemPrompt(ctx) },
@@ -578,6 +702,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       log(team.agents.every((a) => typeof a.instructions === "string" && a.instructions.length >= 20),
           `${tag} every agent has real instructions (>=20 chars)`);
 
+      // brand_tokens is DELETED — it may never be granted (palette guard).
+      log(!SKILL_SET.has("brand_tokens"), `${tag} brand_tokens not in SKILL_PALETTE`);
+      log(team.agents.every((a) => !a.tools.includes("brand_tokens")), `${tag} no agent granted brand_tokens`);
+
+      // v1/v2 briefs stored at author time
+      log(team.agents.every((a) =>
+            typeof a.briefV1 === "string" && a.briefV1.length > 0 &&
+            typeof a.briefV2 === "string" && a.briefV2.length > 0),
+          `${tag} every agent has briefV1 + briefV2`);
+      // v2 (instructions) is the authored/woven brief
+      log(team.agents.every((a) => a.briefV2 === a.instructions),
+          `${tag} briefV2 === instructions (woven/authored)`);
+
       // unique ids
       const ids = team.agents.map((a) => a.id);
       log(new Set(ids).size === ids.length, `${tag} agent ids unique`);
@@ -590,16 +727,24 @@ if (import.meta.url === `file://${process.argv[1]}`) {
           /gradient/i.test(a.instructions));
         log(woven, `${tag} recalled lessons woven into a brief`);
 
-        // a recalled lesson must change an agent's TOOLSET, not only its prompt:
-        // the accent/CTA contrast lesson -> the auditor gets contrast_check.
-        const granted = team.agents.find((a) => a.tools.includes("contrast_check"));
-        log(!!granted, `${tag} accent/CTA contrast lesson GRANTED contrast_check to an agent`);
-        if (granted) console.log(`    -> contrast_check granted to [${granted.id}] role=${granted.role}`);
+        // the prompt-diff is stored at author time: at least one lesson-bearing
+        // agent's briefV2 grew vs its briefV1 (the lesson was woven in).
+        const grew = team.agents.some((a) =>
+          LESSON_BEARING_ROLES.has(a.role) && a.briefV2.length > a.briefV1.length);
+        log(grew, `${tag} a lesson-bearing brief grew briefV1 -> briefV2 (prompt-diff stored)`);
+
+        // memory tools ARE present on the memory studio (auditor/builder consult memory)
+        const hasMemTool = team.agents.some((a) =>
+          a.tools.includes("cognee_recall") || a.tools.includes("cognee_trace"));
+        log(hasMemTool, `${tag} memory tools granted to at least one agent`);
       } else {
-        // no memory tools may leak
+        // FAIRNESS: no memory tools may leak onto a no-memory roster
         log(team.agents.every((a) => !a.tools.includes("cognee_recall") && !a.tools.includes("cognee_trace")),
-            `${tag} no memory tools granted`);
+            `${tag} no memory tools granted (fairness)`);
         log(team.agents.every((a) => a.role !== "brand-guardian"), `${tag} no memory-only roles`);
+        // briefV1 === briefV2 on the no-memory studio (no weaving)
+        log(team.agents.every((a) => a.briefV1 === a.briefV2),
+            `${tag} briefV1 === briefV2 (no lessons woven)`);
       }
     }
 
@@ -617,8 +762,51 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     checkTeam(noMem, { isMemory: false });
 
     const mem = await planTeam({ brand, goal, isMemory: true, lessons });
-    printTeam(mem, "(memory, with 2 recalled lessons)");
+    printTeam(mem, "(memory, with 2 recalled lessons from earlier turns)");
     checkTeam(mem, { isMemory: true });
+
+    // ---- CREDIT (2.5) -----------------------------------------------------
+    // Memory team with a flaw attributed to frontend-implementer last turn + 1 lesson.
+    const flawText = "text is hard to read";
+    const credit = {
+      "frontend-implementer": { flaw: flawText, attributedTo: "frontend-implementer", severity: "high" },
+    };
+    const memCredit = await planTeam({
+      brand, goal, isMemory: true,
+      lessons: [{ statement: "Never use gradients; use only flat brand-color blocks." }],
+      credit,
+    });
+    const builder = memCredit.agents.find((a) => a.role === "frontend-implementer");
+    // (a) credit seeded the builder's briefV2 verbatim, and briefV1 does NOT carry it.
+    log(!!builder, "[credit] memory team has a frontend-implementer builder");
+    log(!!builder && builder.briefV2.includes(flawText),
+        "[credit] builder briefV2 contains the verbatim attributed flaw (seeded)");
+    log(!!builder && !builder.briefV1.includes(flawText),
+        "[credit] builder briefV1 does NOT contain the flaw (prompt-diff grew)");
+    // (b) agent.credit equals the exact app.js renderCredit shape.
+    log(!!builder && builder.credit &&
+        builder.credit.flaw === flawText &&
+        builder.credit.attributedTo === "frontend-implementer",
+        "[credit] builder.credit === {flaw, attributedTo}");
+    // (c) at least one agent carries a validated grantProvenance entry whose skill is in
+    //     its tools and whose fromLesson matches the recalled lesson.
+    const provAgent = memCredit.agents.find((a) =>
+      Array.isArray(a.grantProvenance) && a.grantProvenance.length);
+    log(!!provAgent, "[credit] at least one agent has grantProvenance");
+    log(!!provAgent && provAgent.grantProvenance.every((g) =>
+          g && typeof g.skill === "string" && provAgent.tools.includes(g.skill) &&
+          typeof g.fromLesson === "string" && g.fromLesson.length > 0),
+        "[credit] grantProvenance skill in agent tools + non-empty fromLesson");
+    // (d) the NO-MEMORY team (credit {}) carries NO credit and NO grantProvenance.
+    const noMemCredit = await planTeam({ brand, goal, isMemory: false, lessons: [], credit: {} });
+    log(noMemCredit.agents.every((a) => a.credit === undefined),
+        "[credit] no-memory team has NO agent.credit (fairness)");
+    log(noMemCredit.agents.every((a) => a.grantProvenance === undefined),
+        "[credit] no-memory team has NO grantProvenance (fairness)");
+    // belt-and-suspenders: no rawProv scratch field leaks into the returned shape.
+    log(memCredit.agents.every((a) => !("rawProv" in a)) &&
+        noMemCredit.agents.every((a) => !("rawProv" in a)),
+        "[credit] rawProv scratch field stripped from returned agents");
 
     console.log(`\n${ok ? "team.mjs smoke: ALL PASS" : "team.mjs smoke: FAILURES"}`);
     process.exit(ok ? 0 : 1);

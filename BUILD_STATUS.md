@@ -1,55 +1,58 @@
-# TASTELOOP — BUILD STATUS (live, updated by lead)
+# TASTELOOP — BUILD STATUS & COMPLETED WORK (live record)
 
-**Target:** submittable demo in ~45 min. Local + keyless (Ollama).
+> Self-contained handoff record (context may roll). The working app is in `web/`. Full concept/plan: `tasteloop-design-doc.md` + `tasteloop-demo-plan.md`. Critique: `tasteloop-review.md`.
 
-## MVP goal
-Two studios side-by-side build a TikTok site from `TikTok_guidelines.pdf`. **Page 2 (memory) learns & scores higher; Page 1 (no memory) doesn't.** Web UI replays an event log with live counters (Agents · Turns x/20 · Traces · Improvements · Lessons) + a live `<iframe>` of each site.
+## What it is
+A local web demo: two AI **studios** build a TikTok marketing site side-by-side — **Page 1 "No Memory"** vs **Page 2 "Cognee Memory"** — proving Cognee memory makes the build measurably better. Recorded → sped to ~60s; also live-replayable in the UI.
 
-## Status — TIER 2.5 PROVEN ✅ (memory WINS 64 vs 54, honest)
-2.5 test run: **memory 64 vs no-memory 54**. 27 agents ALL with master-authored prompts+skills (master invented an 8-role team incl. `brand-guardian`). Codex-gpt-5.4-HIGH judge gave real reasoning, caught a real font violation. Model locked = **gpt-5.4 medium everywhere** (Spark 5.3 / -codex variants rejected on ChatGPT auth).
-⚠️ Weak spot: distilled lessons low-quality ("Got it."/fluff) — Cognee local-distill needs work (fix in 2.7).
-In flight: design-system extraction (rich tokens/css from PDF) · Tier 2.6 (vision judge, image-gen, prompt-diff wow, lesson→skill). Queued 2.7: wire stylesheet into agents, judge→medium, progressive render + batch-cognee, fix lesson quality.
+## RUN IT
+```bash
+# main (work-in-progress) — http://localhost:8080
+node web/serve.mjs
+GENS=2 MEM=cognee node web/run.mjs      # produces web/run/events.json + snapshots (streams live)
 
-## (history) Tier 2.5 v2 build (workflow wxhw5wrj9, 7 agents)
-**Tier 2 ✅ verified real but thesis FAILED honestly:** real Codex builds (gpt-5.4) + real Cognee (no fallbacks), BUT memory **lost 55 vs 75** — because (a) qwen judge = noise, (b) Codex never makes the gradient mistake so the win-lever never fired.
-**Tier 2.5 v2 fixes both (7 agents):** master authors the full team (count + per-agent prompts + skills) · every agent does real work · **judge = Codex gpt-5.4 HIGH** (no qwen) · honest brand-rule lever (memory recalls a real rule Codex misses → no-memory violates → deterministic penalty → memory wins on merit) · UI shows each agent's prompt+skills. Verify runs end-to-end (~15 min: Codex builds + Codex-high judge are slow).
+# frozen backup (memory WINS 64v54) — http://localhost:8090
+PORT=8090 node web-backup/serve.mjs
 
-## (old) Status — TIER 2 (workflow wlljqy6mg)
-**Tier 1 ✅ (honest checkpoint on disk):** real Cognee in loop + deterministic brand-lint → **no-memory 45 vs memory 65** (memory wins on merit: it removed the forbidden gradient; no-memory kept it → −25). 7 real traces, distilled lessons.
-**Tier 2 building (no fallbacks, Codex 5.4-Codex medium):** make-codex-work · real brand-PDF deconstruct · orchestrator rewrite (real master-spawn + Codex-built HTML + injected Cognee lessons) · end-to-end verify. ⚠️ Risk: if `codex exec` can't run non-interactively in this env, there's no fallback by design — the verify agent will report honestly.
-
-## (Tier 1) Status
-**✅ LIVE-STREAMING demo — `http://localhost:8080`** (hard-refresh to load live UI). run.mjs now streams events.json as it builds + runs BOTH studios concurrently; app.js polls every 0.6s and renders in real time (verified: events.json grows live). REAL Ollama run in progress (task bxsbbq3p4, GENS=2, shim memory).
-
-**Sequencing (Ollama is shared/sequential):** (1) ✅ live run working → (2) re-run Cognee fix (fastembed leader) with Ollama free → (3) wire `memory.mjs('cognee')` → final `MEM=cognee` live run = the recording.
-
-**Build fleet** (task w0fmlpy1k) — ✅ DONE, all syntax-clean, server smoke-tested:
-- [x] **S** scaffold + sample 87-event log + static server
-- [x] **U** mission-control UI (verified via headless screenshot)
-- [x] **M** modules ollama/memory(shim)/brand (smoke-tested)
-- [x] **O** orchestrator + run.mjs (real Ollama build — not yet executed)
-- [x] **A** assets (TikTok SVG/template)
-
-**Cognee-fix race** (task w8t0aof6z) — ⏳ RUNNING. `fastembed` trending as winner; not yet confirmed green.
-
-**Lead next:** (1) Cognee-fix lands → wire winner into `memory.mjs('cognee')`; (2) `node web/run.mjs` for a REAL Ollama site build (replaces sample); (3) re-open :8080 → record. Sample demo is the safety net throughout.
-
-## Run
+# Cognee: venv /tmp/cognee_smoke/venv ; bridge web/src/cognee_bridge.py ; env cognee.env
 ```
-node web/serve.mjs           # already running → http://localhost:8080
-node web/run.mjs             # (next) real two-page Ollama build → overwrites web/run/
-```
+- **"⟲ Replay" button** = timed client-side replay of the saved run (NO re-run / no model calls); **1x/4x/8x** speed buttons scale it (8x ≈ tight demo).
+- Agent cards show **names**; **click a card** to expand its master-authored prompt + skills.
 
-## Proven by smoke test
-- ✅ Ollama up; `nomic-embed-text` 768-dim embeddings; `glm-4.7-flash` valid JSON; PDF→PNG (`pdftoppm`); HTML→screenshot (`/tmp/site/shot.png`).
-- ⚠️ Cognee installs but loop blocked on `await cognee.setup()` + empty-vector embedding → **shim memory drives the demo; real Cognee is the stretch swap.**
+## MODELS (locked)
+- **Build/design/judge agents: Codex `gpt-5.4` medium** via `codex exec` (ChatGPT login, keyless). ⚠️ `-codex` variants (`gpt-5.4-codex`, Spark `gpt-5.3-codex`) are **REJECTED on a ChatGPT account** — only plain `gpt-5.4`/`gpt-5.5` work.
+- **Cognee LLM + embeddings: local Ollama** — `qwen2.5:7b-instruct` (LLM) + **fastembed** (embeddings; nomic-embed-text also pulled). Keyless.
+- **Images: OpenAI `gpt-image-1`** — needs `OPENAI_API_KEY`; `image_gen` skips gracefully if unset.
 
-## Models (local, keyless)
-- Site/agents/judge: Ollama `qwen2.5:7b-instruct` (fast) — was "Codex 5.4" in plan; **using local for keyless + speed in the sprint.**
-- Cognee (if revived): `glm-4.7-flash` + `nomic-embed-text`.
+## COGNEE USAGE (we DO use it — central)
+Traces are **stored in the Cognee graph** (`add`+`cognify`) and **recalled via Cognee graph search** (`search` GRAPH_COMPLETION, session-scoped). That IS the core engine. The only step we stopped depending on is `distill_session` (local model mangled it to "Got it.") — we recall the raw traces from the graph instead, and can synthesize rules via Cognee GRAPH_COMPLETION rather than distill. The Cognee graph (nodes/edges) is the proof surface for 2.9.
 
-## Run (current)
-```
-cd web && python3 -m http.server 8080   # open http://localhost:8080
-node run.mjs                             # (once O lands) generates web/run/events.json
-```
+## ARCHITECTURE (web/src unless noted)
+- `run.mjs` — entry; both pages concurrent; **streams** web/run/events.json live; GENS env (default 2); MEM=none|shim|cognee.
+- `orchestrator.mjs` — per gen: master plan → run every agent → build → critique → (memory: traces→recall→**revise this page** [2.8]) → judge → distill. Emits all events.
+- `team.mjs` — **the MASTER**: `planTeam()` real model call authoring the team `[{id,role,instructions(prompt),tools(skills),produces}]`; `ROLE_PALETTE`, `SKILL_PALETTE`; weaves recalled lessons into prompts + grants matching skills (lesson→skill-grant).
+- `skills.mjs` — `runAgent()` runs each master-spec'd agent with its granted tools; skills: `html_build`(codex), `svg_image`, `cognee_recall`/`cognee_trace`, `image_gen`, `a11y_check`, `contrast_check`, `copy_lint`; `brandRuleViolations()` deterministic lint; `reviseHtml()` [2.8].
+- `codex.mjs` — `codexBuildSite({brand,goal,copyHint,lesson,rules,priorHtml})` real HTML via `codex exec` (inlines design-system.css, NO fallback; rules+priorHtml = revise mode [2.8]); `codexRun`; `codexJudge` (vision: screenshot + `codex exec -i`).
+- `render.mjs` — `renderShot(html→PNG)` via headless Chrome.
+- `judge.mjs` — `judgeSite()` = codexJudge (vision on the screenshot) − brandRuleViolations penalty.
+- `image.mjs` — `generateImage()` OpenAI gpt-image-1 (OPENAI_API_KEY; graceful skip).
+- `memory.mjs` — `makeMemory(none|shim|cognee)`; cognee → bridge subprocess; `writeTrace(s)`/`recallInRun`/`recallLessons`/`distill`; degenerate-lesson filter.
+- `cognee_bridge.py` — REAL Cognee (add/cognify/search/distill_session) on Ollama+fastembed; persists `~/.tasteloop_cognee`; cmds open_session/write_trace/recall_in_run/distill/recall_lessons.
+- `brand.mjs` — `deconstructBrand()` real from `~/Desktop/TikTok_guidelines.pdf` → BrandSpec + `brand.tokens` + `brand.designSystemCss`.
+- `web/run/design-system.css` + `tokens.json` — REAL design system from the PDF (Razzmatazz #FE2C55, Splash #25F4EE, Sofia Pro fonts, type scale, do/don'ts — verbatim).
+- `web/index.html` + `web/app.js` — mission-control UI: 2 columns, 5 counters, click-expand agent cards, live iframes, score, **Replay** (timed) + speed, **upskill prompt-diff panel**.
+- `web/serve.mjs` — zero-dep static server (PORT env).
+
+## TIERS COMPLETED
+- ✅ **Core** — master-spawn, real Codex-built HTML (no fallback), real Cognee bridge, brand-PDF deconstruction, mission-control UI, event-stream + timed replay.
+- ✅ **2.5** — master authors the whole team (count + per-agent prompts + skills); every agent real; Codex-HIGH judge. **Result: memory WON 64 vs 54** → this is the frozen **:8090 backup**.
+- ✅ **2.6** — vision judge (render→screenshot→`codex -i`), prompt-diff/provenance climax + `--ablate-memory`, image-gen wired, lesson→skill-grant.
+- ✅ **2.7** — design-system inlined into builds, judge→medium, progressive render (**preview-on-copy**), batch-cognee, lesson quality filter. **Result: sites richer/on-brand BUT memory LOST 38v42** — the lesson filter starved memory (distill emitted "Got it.", lessons=0).
+- 🔄 **2.8 (RUNNING — task wq9ztr4l5)** — feed **RAW traces** (recalled from Cognee) into the build as rules + **in-run revise loop** (critique → recall traces → revise THIS page). Goal: memory wins because traces visibly fix the page (add #25F4EE accent, remove gradient).
+- ⏳ **2.9 (QUEUED — after 2.8)** — **PROVE learning**: deterministic `trace.resolved` checks (the named flaw is verifiably gone, with evidence), ablation counterfactual (no-memory/ablated keeps the flaw), UI provenance panel (trace→recall→revise→resolved→score Δ), per-run resolution rate climbing.
+
+## KEY DIAGNOSIS (why memory lost in 2.7 — fixed in 2.8)
+The 6 critique traces were GOOD ("accent #25F4EE missing", "gradient present", "tone not provocative"). But: (a) critique runs LAST → traces written after the page is built; (b) the builder only consumed *distilled* lessons; (c) distill mangled them to "Got it." (lessons=0) → builder got nothing → memory built ~same as no-memory → lost to judge noise. The upskill fired with lessonText "Got it.", before==after, score 38→38. **2.8 fixes both: raw traces → builder, + in-run revise.**
+
+## DEMO
+Recorded ~10min real → sped to ~60s, OR live-replay via the **Replay** button. **For a demo NOW: use `:8090`** (memory wins 64v54, stable). Story: two studios build the same TikTok site; the memory studio recalls Cognee traces → fixes flaws → scores higher; no-memory keeps them. 2.9 adds the provable **trace → verified-fix ledger** (the demo-winner).

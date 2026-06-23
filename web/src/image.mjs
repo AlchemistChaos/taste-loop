@@ -73,7 +73,7 @@ function buildBrandPrompt(prompt, brand) {
   if (palette.length) {
     parts.push(
       `Use ONLY this flat brand color palette: ${palette.join(", ")}. ` +
-      `Solid flat color blocks, high contrast, no other colors.`
+      `Flat, bold, high-contrast color — no other colors, no gradients. Depict a real focal subject, not abstract color blocks.`
     );
   }
 

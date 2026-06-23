@@ -1,5 +1,5 @@
 {
-  "last_turn_at": "2026-06-20T18:15:44.194Z",
-  "turn_count": 24,
-  "last_agent_output": "{\"score\":64,\"category\":\"On-brand but rule-broken\",\"reasoning\":\"The page has strong visual hierarchy,"
+  "last_turn_at": "2026-06-21T22:49:35.935Z",
+  "turn_count": 210,
+  "last_agent_output": "{\"quality\":74,\"brandAdherence\":18,\"reasoning\":\"The hero has strong headline hierarchy, clear CTAs, a"
 }

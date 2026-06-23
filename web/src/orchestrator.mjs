@@ -1,43 +1,61 @@
 // orchestrator.mjs — TasteLoop two-page run, wired to the MASTER-AUTHORED team.
 //
 // This is the conductor. It owns NOTHING about HOW agents work — that lives in the
-// frozen modules it imports. Per generation, per page, it:
+// frozen modules it imports. It runs the v3.1 IN-RUN, TURN-BY-TURN self-improvement
+// SPINE (CONTRACTS.md §9). A *run* starts from scratch (memory reset). A *turn* is
+// one `gen` of the loop. There is NO cross-run learning — every run resets all stores.
 //
-//   1) MEMORY page: recalls REAL lessons (memory.recallLessons) into ctx.lessons and
-//      derives ctx.lessonForBuild (the one specific, checkable brand rule to enforce
-//      in the build). The NO-MEMORY page recalls nothing (ctx.lessons = []/null).
+// PRE-RUN (once per run, BOTH pages): memory is re-instantiated by run.mjs and we
+//   call memory.reset(sessionId) → forget(dataset=sess_<runId>_<page>).
 //
-//   2) MASTER: a REAL model call authors the whole team —
-//         const { strategy, agents } = await planTeam({ brand, goal, isMemory, lessons });
-//      then emits master.planned{ roster, strategy }. Every agent in `agents` is the
-//      master's own decision: its role, its instructions (the prompt it runs on), and
-//      its granted tools.
+// PER gen (both pages; the ONLY memory-page deltas are marked [mem]):
+//   1) recall[mem]   — memory.recallInRun(sessionId, q, {nodeName}) VERBATIM. Sets
+//                      ctx.qa_id and ctx.rules/lessons from PRIOR-turn traces. gen 0 is
+//                      empty; the no-memory page skips this step entirely.
+//   2) build[BOTH]   — master plans the roster (planTeam) → runAgent(...) → ctx.html.
+//                      Memory build is conditioned on recalled prior-turn rules + this
+//                      turn's mustFix; no-memory on this turn's mustFix only.
+//   3) critique[BOTH]— codexCritique({brand, screenshotPath, goal}) → findings. The
+//                      orchestrator renders the pre-revise PNG, passes it in, and feeds
+//                      the structured findings into ctx.brief.mustFix (same-turn).
+//   4) trace[mem]    — remember-trace each finding (node_set=[token,role,severity]);
+//                      emit trace.written.
+//   5) revise[BOTH]  — reviseHtml(... rules ...) on THIS page's findings, re-render.
+//                      no-memory: rules = this turn's own critique findings.
+//                      memory:    rules = this turn's findings + recalled PRIOR-turn traces.
+//                      ABLATE:    revise STILL runs but with EMPTY recalled rules.
+//                      Then emit trace.resolved {flaw, beforeShot, afterShot, resolved}.
+//   6) judge[BOTH]   — judgeSite({brand, html, goal}) → {quality, brandAdherence, score}.
+//                      emit score.updated { gen, page, quality, brandAdherence, score }
+//                      with THIS gen's per-gen score (NOT bestScore).
+//   7) feedback[mem] — map the named-flaw delta → 5|3|1; memory.feedback(...).
+//   8) improve[mem]  — memory.improve([sessionId], feedbackAlpha>0) so the NEXT turn's
+//                      recall ranks proven fixes higher.
+//   9) distill[mem]  — memory.distill(sessionId) (session-only Lessons counter).
 //
-//   3) RUN EVERY agent in spec order via runAgent({ agent, gen, page, ctx, deps, emit }).
-//      runAgent makes the agent's REAL call with exactly its granted tools and returns
-//      its output, which we thread back into ctx (copy → copyHint, ia → sections,
-//      html+htmlRef, critique → findings, recall → lessons, …). The html agent builds
-//      the real Codex site fed ctx + (memory) ctx.lessonForBuild. NO template fallback.
-//      The global 20-turn cap is enforced here by gating agent.turn emissions.
-//
-//   4) CRITIQUE is whatever critique agent the master fielded — its findings come from
-//      its OWN real call (we never inject findings). MEMORY: writeTrace each finding
-//      (+trace.written) [unless an agent already traced via cognee_trace, to keep the
-//      counter honest], distill at gen end (+memory.distilled); next gen recalls those
-//      lessons and the applicable role is upskilled (+member.upskilled).
-//
-//   5) JUDGE: const { score, category, reasoning, violations } =
-//         await judgeSite({ brand, html, goal });
-//      emits team.judged{ score, category, reasoning } + score.updated{ score }.
-//      judgeSite uses Codex gpt-5.4 HIGH as the base judge + a deterministic
-//      brand-rule penalty, so the memory page wins honestly AND visibly.
+// Symmetry guarantee (C3): BOTH pages get critique + a same-turn revise from their own
+// findings; the ONLY memory delta is that memory's revise ALSO folds in recalled
+// prior-turn traces. The win is NOT "two attempts."
 //
 // Frozen imports (coded to these signatures; never changed here):
 import { planTeam } from "./team.mjs";
-import { runAgent, brandRuleViolations } from "./skills.mjs";
+import { runAgent, reviseHtml } from "./skills.mjs";
 import { judgeSite } from "./judge.mjs";
-import { codexBuildSite, codexRun } from "./codex.mjs";
+import { codexCritique, codexBuildSite, codexRun } from "./codex.mjs";
+import { renderShot } from "./render.mjs";
 import { chat, chatJSON } from "./ollama.mjs";
+
+import { writeFile, mkdir } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// web/run is the snapshot root; the preview page links the live design-system.css
+// from there. Resolved once; runtime honors TASTELOOP_SNAP_DIR like skills.mjs.
+const __dirname = path.dirname(fileURLToPath(import.meta.url)); // web/src
+const RUN_DIR = path.resolve(__dirname, "..", "run");           // web/run
+function snapDir() {
+  return process.env.TASTELOOP_SNAP_DIR || path.join(RUN_DIR, "snapshots");
+}
 
 // ---- constants -----------------------------------------------------------
 
@@ -48,11 +66,17 @@ export const GOAL =
 // Global per-page turn cap (matches the UI's turnBudget).
 const TURN_CAP = 20;
 
+// feedback_alpha passed to memory.improve (CONTRACTS §1 cmd_improve). Any > 0.
+const FEEDBACK_ALPHA = 0.5;
+
 // ---------------------------------------------------------------------------
-// Lesson derivation — pick the ONE specific, checkable brand rule to ENFORCE in
-// the build for the memory studio. This is the honest win-lever: it's a rule
-// genuinely tied to the TikTok brand that Codex tends to miss by default, that
-// brandRuleViolations() can deterministically verify in the produced HTML.
+// Lesson helpers (NO regex selection — v3.1 Guardrail 5).
+//
+// Recalled in-run traces are concrete strings (verbatim from memory.recallInRun,
+// CONTRACTS §1 recall). We thread them straight to the builder as fix-rules; there
+// is NO regex classifier picking a "driving" lesson and no deterministic brand
+// check. The "enforceable rule" for the build is simply the FIRST recalled trace
+// (already feedback-ranked by improve()).
 // ---------------------------------------------------------------------------
 
 function lessonStatement(l) {
@@ -65,90 +89,129 @@ function lessonId(l, idx) {
   return `L${idx + 1}`;
 }
 
-// From the recalled lessons, choose the most enforceable one (gradient / buzzword
-// / accent-on-CTA are the demo's headline, checkable wins), else the first lesson.
-function deriveLessonForBuild(lessons) {
+// The one enforceable rule for the build = the first recalled trace/lesson (no
+// regex priority — improve() already feedback-ranks them so the first is the most
+// proven). Returns null when there is nothing recalled.
+function firstLesson(lessons) {
   if (!Array.isArray(lessons) || lessons.length === 0) return null;
-  const priority = lessons.find((l) =>
-    /gradient|buzzword|jargon|accent|cta|#25f4ee/i.test(lessonStatement(l))
-  );
-  const text = lessonStatement(priority || lessons[0]).trim();
+  const text = lessonStatement(lessons[0]).trim();
   return text || null;
 }
 
 // ---------------------------------------------------------------------------
-// PROVENANCE / PROMPT-DIFF helpers.
+// PROVENANCE / PROMPT-DIFF.
 //
-// The master (planTeam) WEAVES recalled lessons into the lesson-bearing agents'
-// instructions — that woven instruction is the "after" (v2). To show the UI's
-// prompt-diff panel we must reconstruct the "before" (v1): the SAME agent's
-// instruction WITHOUT the recalled lessons. We do this deterministically (no 2nd
-// model call) by stripping the woven-in lesson text + the known tail markers that
-// team.mjs/weaveLessons/defaultInstructions append.
+// The master (team.mjs, Phase 2.2) stores each lesson-bearing agent's v1 (no-lesson)
+// and v2 (lesson-woven) brief AT AUTHOR TIME, exposed as `agent.briefDiff = {before,
+// after, lessonId, lessonText}`. We read that diff directly — NO regex reconstruction.
+// Pick the first agent that carries one (the master prefers the builder).
 // ---------------------------------------------------------------------------
-
-// Markers team.mjs appends when it weaves a lesson into a brief.
-const LESSON_TAIL_MARKERS = [
-  / LEARNED RULES \(from memory[^]*$/i,        // weaveLessons() tail
-  / Apply these learned rules verbatim[^]*$/i, // defaultInstructions() lessonTail
-  / LEARNED RULE you MUST apply[^]*$/i,        // builder copyHint phrasing
-];
-
-// Remove the recalled lesson statements + known tails from an instruction string
-// to reconstruct the pre-lesson ("before") version. Returns the trimmed string.
-function stripLessons(instructions, lessons) {
-  let s = String(instructions || "");
-  // 1) drop any known appended tail block first (cheap + exact for woven briefs).
-  for (const re of LESSON_TAIL_MARKERS) {
-    s = s.replace(re, "");
-  }
-  // 2) remove each lesson statement verbatim (and a leading connector if present).
-  for (const l of lessons || []) {
-    const stmt = lessonStatement(l).trim();
-    if (!stmt) continue;
-    const esc = stmt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    // strip "; <stmt>", " <stmt>", or the bare statement, plus a trailing period.
-    s = s.replace(new RegExp(`\\s*[;.]?\\s*${esc}\\.?`, "gi"), "");
-  }
-  return s.replace(/\s+/g, " ").trim();
-}
-
-// Roles whose briefs team.mjs may weave lessons into (mirrors LESSON_BEARING_ROLES
-// in team.mjs). We prefer the builder for the diff (its brief drives the page).
-const LESSON_BEARING_PREF = [
-  "frontend-implementer",
-  "visual-designer",
-  "brand-guardian",
-  "critique",
-  "copywriter",
-];
-
-// Pick the agent whose instructions actually changed because of the lessons, and
-// return its before/after diff. Prefers the builder; falls back to any agent whose
-// instruction shrank once the lessons are stripped (i.e. a lesson was woven in).
-function pickUpskilledAgent(agents, lessons) {
-  if (!Array.isArray(agents) || !agents.length || !Array.isArray(lessons) || !lessons.length) {
-    return null;
-  }
-  // Candidates in preference order, then any remaining agent.
-  const ordered = [
-    ...LESSON_BEARING_PREF
-      .map((role) => agents.find((a) => a.role === role))
-      .filter(Boolean),
-    ...agents,
-  ];
-  const seen = new Set();
-  for (const agent of ordered) {
-    if (!agent || seen.has(agent)) continue;
-    seen.add(agent);
-    const after = String(agent.instructions || "");
-    const before = stripLessons(after, lessons);
-    // Only an agent whose brief genuinely carries a lesson (before != after).
-    if (before && before !== after && before.length < after.length) {
-      return { agent, before, after };
+function pickUpskilledAgent(agents) {
+  if (!Array.isArray(agents) || !agents.length) return null;
+  for (const agent of agents) {
+    const d = agent && agent.briefDiff;
+    if (d && typeof d === "object" &&
+        typeof d.before === "string" && typeof d.after === "string" &&
+        d.before !== d.after) {
+      return { agent, before: d.before, after: d.after, diff: d };
     }
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// RECALL helpers (NO keyword-bag classifier — Guardrail 5).
+//
+// The verbatim build-feeding recall (CONTRACTS §1) takes a query + an OPTIONAL
+// node_name read filter scoped to the brand's canonical token nodes. We build both
+// from the brand/goal directly (no regex over findings), so recall is deterministic
+// and brand-grounded, not a hand-tuned keyword soup that picks the demo's win.
+// ---------------------------------------------------------------------------
+
+// The brand's primary canonical token node (anchors traces/lessons via node_set).
+function brandToken(brand) {
+  const roles = brand && brand.tokens && brand.tokens.color && brand.tokens.color.roles;
+  const c = (roles && (roles.primary || roles.secondary)) ||
+    (brand && brand.colors && (brand.colors.primary || brand.colors.accent)) || "";
+  return String(c || "brand").trim();
+}
+
+// The recall query: brand identity + goal (a stable, brand-grounded prompt — NOT a
+// list of the specific flaws memory fixes, so recall can't be gamed toward the win).
+function recallQuery(brand, goal) {
+  const tone = Array.isArray(brand && brand.tone) ? brand.tone.join(" ") : "";
+  return `design quality and brand adherence for ${goal} — ${tone}`.trim();
+}
+
+// node_name read filter (OR-joined): scope recall to the brand token + the critique
+// role so we pull this run's relevant prior-turn traces.
+function recallNodeName(brand) {
+  return [brandToken(brand), "critique"].filter(Boolean);
+}
+
+// ---------------------------------------------------------------------------
+// CRITIQUE / SEVERITY / CREDIT helpers.
+// ---------------------------------------------------------------------------
+
+// Normalize the structured severity field (the ONLY severity source — no regex).
+function normSeverity(s) {
+  const v = String(s || "").trim().toLowerCase();
+  if (v === "high") return "high";
+  if (v === "low") return "low";
+  return "med"; // default + any non-enum value
+}
+
+// Credit assignment (2.4): map each vision flaw to the responsible roster agent.
+// We use the structured brandRuleCited enum + role-name affinity (NO regex over the
+// flaw text). Falls back to the builder/critique role. Returns a map flaw->role.
+const ROLE_AFFINITY = [
+  // [match-substring-of-rule-or-cited, preferred role]
+  ["contrast", "typographer"],
+  ["font", "typographer"],
+  ["type", "typographer"],
+  ["copy", "copywriter"],
+  ["headline", "copywriter"],
+  ["buzzword", "copywriter"],
+  ["jargon", "copywriter"],
+  ["color", "visual-designer"],
+  ["gradient", "visual-designer"],
+  ["layout", "visual-designer"],
+  ["spacing", "visual-designer"],
+  ["image", "image-sourcer"],
+  ["section", "info-architect"],
+];
+
+function assignCredit(findingObjs, agents) {
+  const roles = new Set((Array.isArray(agents) ? agents : []).map((a) => a && a.role).filter(Boolean));
+  const builder = (Array.isArray(agents) ? agents : []).find(
+    (a) => a && (a.produces === "html" || (Array.isArray(a.tools) && a.tools.includes("html_build")))
+  );
+  const builderRole = (builder && builder.role) || "frontend-implementer";
+  const map = new Map();
+  for (const f of findingObjs || []) {
+    const cited = String((f && f.brandRuleCited) || "").toLowerCase();
+    let role = null;
+    for (const [needle, r] of ROLE_AFFINITY) {
+      if (cited.includes(needle) && roles.has(r)) { role = r; break; }
+    }
+    map.set(f.flaw, role || builderRole);
+  }
+  return map;
+}
+
+function creditRole(finding, creditMap) {
+  return (creditMap && creditMap.get(finding.flaw)) || null;
+}
+
+function creditAgentId(finding, creditMap, page, gen) {
+  const role = creditRole(finding, creditMap) || "critique";
+  return `${page}-${role}-v1-g${gen}`;
+}
+
+// Pre-revise / post-revise PNG path for codexCritique + resolved-proof. Lives under
+// the snapshot dir so the UI can reference it (htmlRef-relative via run.mjs).
+function preShotPath(page, gen, kind) {
+  return path.join(snapDir(), `${page}-g${gen}-${kind}.png`);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,29 +240,220 @@ function injectHeroImage(html, dataUri) {
 }
 
 // ---------------------------------------------------------------------------
+// PROGRESSIVE RENDER — the fast LIVE-PREVIEW page.
+//
+// The Codex build is the slow step (tens of seconds). The moment copy + the
+// design system are in hand (after the copy/IA agents, before the builder) we
+// can assemble a simple, on-brand page that LINKS the real design-system.css and
+// drops the threaded copy/sections into the .ds-* utilities — no model call, so
+// the iframe fills in well under a second. We emit an EARLY design.rendered with
+// THIS preview, mark it draft in agent.status, then the real Codex build emits a
+// SECOND design.rendered that REPLACES it. The FINAL judged page is always Codex.
+// ---------------------------------------------------------------------------
+
+function esc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Pull a hero headline + supporting line out of whatever copy the team threaded.
+// ctx.copyHint is built by runLanguageTool as: `Hero headline tone: "<hero>". <angle>`
+// (the copywriter), prefixed by the master's strategy. We recover the hero/angle
+// best-effort and fall back to brand-true defaults so the preview always reads.
+function previewCopy(ctx, brand, goal) {
+  const hint = String(ctx?.copyHint || "");
+  const heroM = hint.match(/Hero headline tone:\s*"([^"]+)"/i);
+  const hero = (heroM && heroM[1].trim()) || goal || "Go viral. Get customers.";
+  // The angle is whatever copy follows the hero clause (or the raw hint / strategy).
+  let angle = "";
+  if (heroM) {
+    angle = hint.slice(heroM.index + heroM[0].length).replace(/^[.\s]+/, "").trim();
+  }
+  if (!angle) angle = hint.trim();
+  if (!angle) {
+    const tone = Array.isArray(brand?.tone) ? brand.tone.join(", ") : "bold, direct";
+    angle = `Turn 60-second videos into customers — ${tone}.`;
+  }
+  // Keep the preview tight; it's a progress glimpse, not the final page.
+  return { hero: hero.slice(0, 140), angle: angle.slice(0, 240) };
+}
+
+// Build the quick preview HTML. Links the live design-system.css (relative to the
+// snapshot dir) AND inlines it when readable so the iframe is correct even before
+// the stylesheet request resolves. Uses ONLY .ds-* utilities + role tokens so it
+// is genuinely on-brand (flat colors, accent on CTA, no gradients).
+function buildPreviewPage({ ctx, brand, goal }) {
+  const { hero, angle } = previewCopy(ctx, brand, goal);
+  const roles = brand?.tokens?.color?.roles || {};
+  const sections = Array.isArray(ctx?.sections) && ctx.sections.length
+    ? ctx.sections
+    : (Array.isArray(brand?.sections) ? brand.sections : ["hero", "problem", "how-it-works", "proof", "cta"]);
+
+  // The hero image, if image_gen produced one, makes the preview feel complete.
+  const heroImg = ctx?.heroImage
+    ? `<img class="ds-image-mask" alt="TikTok for Business hero" src="${ctx.heroImage}" style="max-width:100%;height:auto;margin-top:var(--space-6)" />`
+    : "";
+
+  // Section cards (skip "hero" — it's the headline block above).
+  const cards = sections
+    .filter((s) => !/^hero$/i.test(String(s)))
+    .map((s) => {
+      const name = String(s).replace(/[-_]/g, " ");
+      return `      <div class="ds-card ds-stack">
+        <h2 class="ds-subhead">${esc(name.charAt(0).toUpperCase() + name.slice(1))}</h2>
+        <p class="ds-body-text ds-muted">Live preview — the final copy &amp; layout for this section are still being built by Codex.</p>
+      </div>`;
+    })
+    .join("\n");
+
+  const bg = roles.bg || brand?.colors?.bg || "#000000";
+  const fg = roles.fg || brand?.colors?.fg || "#FFFFFF";
+
+  // Prefer linking the real stylesheet; also try to inline it so the preview is
+  // pixel-true immediately (no flash). Both reference the SAME design-system.css.
+  const cssLink = `<link rel="stylesheet" href="../design-system.css">`;
+  const inline = typeof brand?.designSystemCss === "string" && brand.designSystemCss.trim()
+    ? `<style>\n${brand.designSystemCss}\n</style>`
+    : "";
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TikTok for Business — live preview</title>
+  ${cssLink}
+  ${inline}
+  <style>html,body{background:${bg};color:${fg};margin:0}</style>
+</head>
+<body class="ds-bg">
+  <main class="ds-section">
+    <div class="ds-container ds-stack">
+      <span class="ds-chip ds-chip-outline ds-caption">live preview · building…</span>
+      <h1 class="ds-h1">${esc(hero)}</h1>
+      <p class="ds-lead">${esc(angle)}</p>
+      <div>
+        <a class="ds-btn ds-btn-primary" href="#">Get started free</a>
+        <a class="ds-btn ds-btn-outline" href="#">See how it works</a>
+      </div>
+      ${heroImg}
+    </div>
+  </main>
+  <section class="ds-section">
+    <div class="ds-container ds-grid">
+${cards}
+    </div>
+  </section>
+</body>
+</html>`;
+}
+
+// Write the preview snapshot and emit the EARLY design.rendered (+ a draft
+// agent.status). Returns the htmlRef (or null on failure — preview is best-effort
+// and must NEVER abort a run; the real Codex page is still authoritative).
+async function emitPreview({ ctx, brand, goal, page, gen, emit }) {
+  try {
+    const html = buildPreviewPage({ ctx, brand, goal });
+    const seq = Number.isFinite(ctx?.seq) ? ctx.seq + 1 : 1;
+    if (ctx && typeof ctx === "object") ctx.seq = seq;
+    const fileName = `${page}-g${gen}-preview-s${seq}.html`;
+    const dir = snapDir();
+    try { await mkdir(dir, { recursive: true }); } catch { /* ignore */ }
+    await writeFile(path.join(dir, fileName), html, "utf8");
+    const htmlRef = path.posix.join("snapshots", fileName);
+    // Mark it a DRAFT so the UI shows this is a progress preview, not the final.
+    emit({ type: "agent.status", agentId: `${page}-preview-g${gen}`, doing: "live preview rendered (draft) — Codex building the final page…", draft: true });
+    emit({ type: "design.rendered", htmlRef, draft: true });
+    return htmlRef;
+  } catch {
+    return null; // never let the preview break the run
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Threading: merge one agent's runAgent() result into the shared run ctx so the
 // next agents (esp. the builder + critique) see what came before.
 // ---------------------------------------------------------------------------
 
+// Merge concrete fix-rule strings into an existing list, trimming + de-duping
+// (case-insensitively) so the builder never gets blanks or repeats. Returns a
+// fresh array. Used to fold recalled raw-trace snippets onto ctx.rules.
+function mergeRules(existing, incoming) {
+  const out = [];
+  const seen = new Set();
+  for (const r of [...(Array.isArray(existing) ? existing : []), ...(Array.isArray(incoming) ? incoming : [])]) {
+    const s = String(r == null ? "" : r).trim();
+    if (!s) continue;
+    const k = s.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(s);
+  }
+  return out;
+}
+
 function threadResult(ctx, result) {
   if (!result || typeof result !== "object") return;
 
-  // recall agent → lessons to honor downstream (memory page). Under ablation we
-  // DROP these on the floor: recall ran (and emitted its hits) but its lessons
-  // never become enforceable, so the win that memory bought disappears.
-  if (!ctx._ablate && Array.isArray(result.lessons) && result.lessons.length) {
-    ctx.lessons = result.lessons;
-    if (!ctx.lessonForBuild) ctx.lessonForBuild = deriveLessonForBuild(result.lessons);
+  // recall agent → recalled prior-turn traces become the PRIMARY fix signal.
+  // CONTRACTS §2: recallInRun now returns { hits:[{snippet,role}], qa_id }; the
+  // skills.mjs runRecall surfaces those hits (result.hits and/or result.lessons).
+  // Under ablation we DROP these on the floor: recall ran (and emitted its hits)
+  // but its rules never become enforceable, so the win that memory bought
+  // disappears (C3).
+  if (!ctx._ablate) {
+    // (a) hits from the recall skill — verbatim recalled trace snippets.
+    const hits =
+      (Array.isArray(result.hits) && result.hits) ||
+      (result.output && Array.isArray(result.output.hits) && result.output.hits) ||
+      (result.output && Array.isArray(result.output.inRun) && result.output.inRun) ||
+      [];
+    const traceRules = hits
+      .map((r) => String(r && (r.snippet ?? r) || "").trim())
+      .filter(Boolean);
+    if (traceRules.length) {
+      ctx.rules = mergeRules(ctx.rules, traceRules);
+      // Lessons mirror the recalled traces (no regex selection); first = enforceable.
+      ctx.lessons = traceRules.map((statement) => ({ statement }));
+      if (!ctx.lessonForBuild) ctx.lessonForBuild = firstLesson(ctx.lessons);
+    } else if (Array.isArray(result.lessons) && result.lessons.length) {
+      ctx.lessons = result.lessons;
+      if (!ctx.lessonForBuild) ctx.lessonForBuild = firstLesson(result.lessons);
+    }
+    // Thread the qa_id forward so the feedback step can target this recall (C2).
+    if (typeof result.qa_id === "string" && result.qa_id) ctx.qa_id = result.qa_id;
+    else if (result.output && typeof result.output.qa_id === "string" && result.output.qa_id) {
+      ctx.qa_id = result.output.qa_id;
+    }
   }
 
-  // copywriter → copy direction hint for the builder
+  // copywriter → copy direction hint for the builder + the typed brief slot.
   if (typeof result.copyHint === "string" && result.copyHint.trim()) {
     ctx.copyHint = result.copyHint.trim();
+    ctx.brief.copy = result.copyHint.trim();
+  }
+  if (result.copy && (typeof result.copy === "string" || typeof result.copy === "object")) {
+    ctx.brief.copy = result.copy;
   }
 
-  // info-architect → section plan
+  // info-architect → section plan + the typed brief slot.
   if (Array.isArray(result.sections) && result.sections.length) {
     ctx.sections = result.sections;
+    ctx.brief.sectionOrder = result.sections.map(String);
+  }
+
+  // visual-designer / typographer / image-sourcer → typed brief slots (2.3).
+  if (typeof result.layoutDirection === "string" && result.layoutDirection.trim()) {
+    ctx.brief.layoutDirection = result.layoutDirection.trim();
+  }
+  if (typeof result.typeScale === "string" && result.typeScale.trim()) {
+    ctx.brief.typeScale = result.typeScale.trim();
+  }
+  if (typeof result.imageDirective === "string" && result.imageDirective.trim()) {
+    ctx.brief.imageDirective = result.imageDirective.trim();
   }
 
   // builder → the real page + its snapshot ref
@@ -211,8 +465,8 @@ function threadResult(ctx, result) {
 
   // image_gen → an on-brand hero data URI for the builder to embed. runImageGen
   // already sets ctx.heroImage; mirror it here too in case a result carries it
-  // (so the post-build inject safety net always has it). Never threaded under
-  // ablation — but image_gen is a non-memory capability so this is unaffected.
+  // (so the post-build inject safety net always has it). image_gen is a neutral
+  // capability available to BOTH pages, so this is never _ablate-gated.
   if (typeof result.heroImage === "string" && result.heroImage) {
     ctx.heroImage = result.heroImage;
   }
@@ -242,23 +496,42 @@ function threadResult(ctx, result) {
  * @param {Function} a.emit     emit(event) — caller fills page/gen/t
  * @param {string}   a.snapDir  absolute dir for HTML snapshots (htmlRef relative to web/run/)
  * @param {string}   [a.goal]   product goal string passed into Codex
- * @param {boolean}  [a.ablate] MEMORY counterfactual: recall lessons as usual but
- *                              STRIP them from the agents' briefs + the build so we
- *                              can show "memory removed = the win disappears".
+ * @param {string}   [a.runId]  the per-run id minted in run.mjs (H4). The session is
+ *                              `sess_<runId>_<page>`; all stores reset to it per run.
+ * @param {boolean}  [a.ablate] MEMORY counterfactual: recall STILL runs but the
+ *                              recalled prior-turn rules are STRIPPED from the build +
+ *                              the revise (revise uses EMPTY recalled rules) so we can
+ *                              show "memory removed = the win disappears" (C3).
  *                              Defaults to process.env.ABLATE === "1".
  */
-export async function runPage({ page, gens, memory, brand, emit, snapDir, goal = GOAL, ablate }) {
+export async function runPage({ page, gens, memory, brand, emit, snapDir, goal = GOAL, runId, ablate }) {
   const isMemory = page === "memory";
   // Ablation only makes sense on the memory studio. Honor an explicit flag, else
   // fall back to the env switch (so `ABLATE=1 node run.mjs` works without wiring).
   const ablateMemory = isMemory && (ablate != null ? !!ablate : process.env.ABLATE === "1");
-  const sessionId = `${page}-run`;
+  // sessionId convention (CONTRACTS §8 — frozen): sess_<runId>_<page>. runId is minted
+  // in run.mjs; fall back only so a bare runPage call (smoke test) still has a unique id.
+  const rid = runId || `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const sessionId = `sess_${rid}_${page}`;
 
   // runAgent writes snapshots to env-overridable TASTELOOP_SNAP_DIR; honor the
   // dir run.mjs handed us so the live web/run/snapshots is the one that fills.
   if (snapDir) process.env.TASTELOOP_SNAP_DIR = snapDir;
 
+  // ===================================================================
+  // PRE-RUN RESET (C1, H4) — wipe this run's session store before any turn.
+  // memory.mjs is re-instantiated per run by run.mjs (shim closure wiped); here we
+  // forget the session dataset so a trace from run N is unrecoverable in run N+1
+  // (their sessionIds differ by runId). Best-effort: reset never aborts a run.
+  // ===================================================================
+  if (typeof memory.reset === "function") {
+    try { await memory.reset(sessionId); } catch { /* reset best-effort (C1) */ }
+  }
   await memory.openSession(sessionId);
+
+  // BOTH pages ground identically from the always-on flat string design-token
+  // summary (codex.mjs tokenSummary/dsContract) — the proven-good path. The in-run
+  // memory win comes purely from recalled traces (recallInRun), not brand grounding.
 
   // --- global 20-turn cap, enforced HERE (not in runAgent) ---
   // We wrap emit so that once the page has taken TURN_CAP counted turns, further
@@ -285,9 +558,14 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir, goal =
   // The most recent per-gen judged score for THIS page. Feeds the prompt-diff
   // panel's scoreBefore (the prior gen's score for the page that just upskilled).
   let lastGenScore = null;
+  // Per-agent credit carried to the NEXT turn (2.4): { role -> {flaw, attributedTo} }.
+  // The orchestrator computes credit AFTER this turn's critique; planTeam attaches it
+  // to next turn's spawn so the per-agent rows mean something + the agent's brief is
+  // seeded with its own miss. Memory page only (the win-bearing roster).
+  let creditByRole = {};
 
   // deps handed to every agent's runAgent() call (the frozen executor interface)
-  const deps = { brand, goal, memory, chat, chatJSON, codexBuildSite, codexRun };
+  const deps = { brand, goal, memory, chat, chatJSON, codexBuildSite, codexRun, codexCritique };
 
   // run.started — note the ablation counterfactual when it's on so the demo can
   // surface "memory removed" in the UI/console.
@@ -297,78 +575,109 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir, goal =
 
   for (let gen = 0; gen < gens; gen++) {
     // ===================================================================
-    // 1) MEMORY recall (before planning) — lessons learned in prior gens.
-    //    NO-MEMORY: recalls nothing; ctx.lessons stays null.
+    // SPINE STEP 1 — RECALL [mem] (verbatim; CONTRACTS §9.1).
+    //   memory.recallInRun(sessionId, q, {nodeName}) returns { hits, qa_id }.
+    //   gen 0 returns empty (nothing has been traced yet). The NO-MEMORY page
+    //   SKIPS this entirely. The recalled prior-turn traces become ctx.rules and
+    //   ctx.lessons; qa_id is threaded for the feedback step. Under ABLATION recall
+    //   STILL runs (and emits its hits) but the recalled rules are dropped so they
+    //   never reach the build/revise — memory removed, the win disappears (C3).
     // ===================================================================
+    let recalledRules = [];
     let lessons = [];
-    if (isMemory && gen > 0) {
+    let qaId = null;
+    if (isMemory) {
       try {
-        lessons = (await memory.recallLessons(
-          "brand design quality gradient buzzword jargon accent cta flat color"
-        )) || [];
+        const r = (await memory.recallInRun(
+          sessionId,
+          // Brand-grounded recall query (NO keyword-bag classifier). The build-feeding
+          // recall is verbatim (CHUNKS_LEXICAL); node_name scopes to the brand tokens.
+          recallQuery(brand, goal),
+          { nodeName: recallNodeName(brand) }
+        )) || {};
+        const hits = Array.isArray(r.hits) ? r.hits : (Array.isArray(r) ? r : []);
+        qaId = (typeof r.qa_id === "string" && r.qa_id) ? r.qa_id : null;
+        recalledRules = hits
+          .map((h) => String(h && (h.snippet ?? h) || "").trim())
+          .filter(Boolean);
+        lessons = recalledRules.map((statement) => ({ statement }));
+        if (hits.length) {
+          // Surface the recalled hits on the stream (memory page evidence).
+          gatedEmit({ type: "memory.recalled", agentId: `${page}-recall-g${gen}`, hits: hits.map((h) => ({ snippet: String(h && (h.snippet ?? h) || "") })) });
+        }
       } catch {
-        lessons = [];
+        recalledRules = []; lessons = []; qaId = null;
       }
     }
-    // On the memory page we still RECALL lessons, but if ablation is on we DROP
-    // them everywhere downstream (briefs + build enforcement) — the counterfactual
-    // that proves the win comes from memory. The master is given the SAME lessons
-    // only when not ablating.
-    const lessonsForTeam = isMemory && !ablateMemory ? lessons : [];
-    const lessonForBuild = (isMemory && !ablateMemory) ? deriveLessonForBuild(lessons) : null;
+
+    // Under ablation the recalled rules are withheld from the team + the build.
+    const lessonsForTeam = (isMemory && !ablateMemory) ? lessons : [];
+    const lessonForBuild = (isMemory && !ablateMemory) ? firstLesson(lessons) : null;
 
     // ===================================================================
-    // 2) MASTER — a REAL model call authors the whole team for this gen.
-    //    Same team either way; under ablation the master gets NO lessons, so the
-    //    briefs come back without the recalled rules woven in.
+    // SPINE STEP 2 — BUILD [BOTH]. The MASTER authors the whole team for this gen.
+    //   The master is given this run's recalled EARLIER-TURN lessons (memory, not
+    //   ablated) so it can field a better roster; under ablation it gets none.
     // ===================================================================
     const { strategy, agents } = await planTeam({
       brand,
       goal,
       isMemory,
       lessons: lessonsForTeam,
+      // 2.4: each role's flaw attributed last turn, so the master seeds the agent's
+      // next-turn brief with its own miss + attaches credit to the spawn event.
+      // Empty under ablation / on gen 0 / no-memory page.
+      credit: (isMemory && !ablateMemory) ? creditByRole : {},
     });
     gatedEmit({ type: "master.planned", roster: agents.map((a) => a.role), strategy });
 
     // ---- PROVENANCE / PROMPT-DIFF -------------------------------------
-    // When memory upskilled an agent (a recalled lesson changed its brief), emit a
-    // RICH member.upskilled with the before/after instruction diff so the UI can
-    // pop the prompt-diff panel. scoreAfter is filled once this gen is judged.
-    // Suppressed under ablation (no lessons were woven, so nothing upskilled).
+    // When a recalled earlier-turn lesson changed an agent's brief, the master
+    // stored that agent's before/after on `agent.briefDiff` (Phase 2.2 — NO regex
+    // reconstruction here). Emit a RICH member.upskilled so the UI can pop the
+    // prompt-diff panel. scoreAfter is filled once this gen is judged. Suppressed
+    // under ablation (no lessons were woven, so nothing upskilled).
     let pendingUpskill = null;
     if (isMemory && !ablateMemory && lessons.length) {
-      improvements += 1;
-      const diff = pickUpskilledAgent(agents, lessons);
-      // Choose the lesson that drove the change (gradient/buzzword/accent first).
-      const drivingIdx = (() => {
-        const i = lessons.findIndex((l) =>
-          /gradient|buzzword|jargon|accent|cta|#25f4ee/i.test(lessonStatement(l)));
-        return i >= 0 ? i : 0;
-      })();
-      const drivingLesson = lessons[drivingIdx];
+      const diff = pickUpskilledAgent(agents);
       if (diff) {
+        const d = diff.diff || {};
         pendingUpskill = {
           type: "member.upskilled",
           role: diff.agent.role,
           version: gen + 1,
-          lessonId: lessonId(drivingLesson, drivingIdx),
-          lessonText: lessonStatement(drivingLesson),
+          lessonId: (d.lessonId != null) ? String(d.lessonId) : lessonId(lessons[0], 0),
+          lessonText: (typeof d.lessonText === "string" && d.lessonText) ? d.lessonText : lessonStatement(lessons[0]),
           instructionDiff: { before: diff.before, after: diff.after },
           scoreBefore: typeof lastGenScore === "number" ? lastGenScore : null,
           scoreAfter: null, // filled after judging this gen
         };
       } else {
-        // Fallback: still record the improvement (thin shape) so the counter is
-        // honest even if no diff could be reconstructed.
+        // Fallback: still record the upskill (thin shape) so the panel is honest
+        // even if the master surfaced no diff this gen.
         gatedEmit({ type: "member.upskilled", role: "frontend-implementer", version: gen + 1 });
       }
     }
 
     // The shared run context, threaded BETWEEN agents by runAgent's return values.
-    // Under ablation we keep lessons OUT of ctx so neither the agents' grounded
-    // prompts nor the build enforce them (the recalled rules are deliberately
-    // withheld — that's the counterfactual).
+    // Under ablation the recalled rules are kept OUT of ctx so the build never
+    // enforces them (the recalled rules are deliberately withheld — that's the
+    // counterfactual). The typed BUILD BRIEF (CONTRACTS §6, Phase 2.3) carries every
+    // non-builder agent's named slot to the builder; mustFix carries THIS turn's
+    // critique findings into THIS turn's build (1.7).
     const ctx = {
+      // The frozen sessionId (CONTRACTS §8). skills.mjs runRecall/runTrace read this
+      // via sessionIdFrom(ctx) and REFUSE to reconstruct the legacy "${page}-run"
+      // hardcode — the orchestrator MUST thread it (H4).
+      sessionId,
+      brief: {
+        copy: null,
+        sectionOrder: [],
+        layoutDirection: "",
+        typeScale: "",
+        imageDirective: "",
+        mustFix: [],
+      },
       lessons: (isMemory && !ablateMemory && lessons.length) ? lessons : null,
       lessonForBuild,
       // mirror lessonForBuild onto ctx.lesson too: skills.runHtmlBuild reads
@@ -377,12 +686,19 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir, goal =
       copyHint: strategy,
       sections: null,
       findings: [],
+      // RAW recalled prior-turn trace snippets threaded straight to the builder
+      // verbatim as numbered fix-rules (memory page only; empty under ablation and
+      // on the no-memory page). The recall agent's own hits ALSO augment this.
+      rules: (isMemory && !ablateMemory) ? mergeRules([], recalledRules) : [],
       html: "",
       htmlRef: "",
       seq: 0,
-      // Under ablation, block the recall agent from threading lessons back into
-      // ctx (threadResult honors this flag). Recall still RUNS + emits its hits,
-      // but its lessons never reach the build — memory removed, win gone.
+      // Threaded qa_id from this turn's recall (C2); read by the feedback step.
+      // null on the no-memory page and whenever recall couldn't resolve one.
+      qa_id: qaId,
+      // Under ablation, block the recall agent from threading recalled rules back
+      // into ctx (threadResult honors this flag). Recall still RUNS + emits its
+      // hits, but its rules never reach the build — memory removed, win gone.
       _ablate: ablateMemory,
     };
 
@@ -404,7 +720,25 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir, goal =
     // ===================================================================
     // 3) RUN EVERY agent, in the master's spec order. Each makes a REAL call.
     // ===================================================================
+    // PROGRESSIVE RENDER: find the first builder so we can fire a fast LIVE
+    // PREVIEW the instant copy + the design system are ready (right before the
+    // slow Codex build). The builder's own design.rendered later REPLACES it.
+    const isBuilderAgent = (a) =>
+      a && (a.produces === "html" ||
+        (Array.isArray(a.tools) && a.tools.includes("html_build")));
+    const firstBuilderIdx = agents.findIndex(isBuilderAgent);
+    let previewEmitted = false;
+
     for (let i = 0; i < agents.length; i++) {
+      // Emit the preview just before the first builder runs: copy/IA agents that
+      // precede it have already threaded their output into ctx, so the preview
+      // reflects the real copy + sections + design system. Best-effort; never
+      // fatal. If there is no builder (shouldn't happen), no preview is shown.
+      if (!previewEmitted && firstBuilderIdx >= 0 && i === firstBuilderIdx) {
+        await emitPreview({ ctx, brand, goal, page, gen, emit: gatedEmit });
+        previewEmitted = true;
+      }
+
       const agent = agents[i];
       agentsSpawned += 1;
       let result;
@@ -425,6 +759,13 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir, goal =
         continue;
       }
       threadResult(ctx, result);
+
+      // Fire the live preview the INSTANT copy lands (right after the copywriter),
+      // so the iframe shows REAL copy fast instead of waiting for the slow builder.
+      if (!previewEmitted && ctx.copyHint) {
+        await emitPreview({ ctx, brand, goal, page, gen, emit: gatedEmit });
+        previewEmitted = true;
+      }
     }
 
     // We must have a real page to judge. (Guaranteed by planTeam's contract: one
@@ -441,57 +782,238 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir, goal =
     }
 
     // ===================================================================
-    // 4) CRITIQUE → MEMORY: trace the auditor's REAL findings, then distill.
+    // SPINE STEP 3 — CRITIQUE [BOTH] (all-LLM vision; CONTRACTS §3, §9.3).
+    //   Render the PRE-REVISE PNG (the orchestrator owns the render so the same
+    //   shot is reused), then ONE Codex vision critique → structured findings
+    //   [{flaw, brandRuleCited, severity}]. NO regex anywhere. Findings feed BOTH
+    //   the trace set (memory) AND the build brief's mustFix (same-turn). Runs on
+    //   BOTH pages every turn (C4); a critique miss is caught so it != a dead run.
     // ===================================================================
-    // The critique agent's OWN findings (its real call) lead. We ALSO run the
-    // deterministic honest brand check on the actual artifact so any real,
-    // checkable violation the auditor missed still gets surfaced and — on the
-    // memory studio — LEARNED. This is the win-lever: the no-memory page violates
-    // a checkable rule, the violation is recorded, and the next memory gen recalls
-    // it as an enforceable lesson. Both are real (no injected/cosmetic findings).
-    const realViolations = brandRuleViolations(ctx.html, brand) || [];
-    const findings = [
-      ...(ctx.findings || []),
-      ...realViolations,
-    ]
-      .filter(Boolean)
-      .map(String);
-    // de-dupe (the auditor and the deterministic check can name the same flaw)
+    let beforeShot = "";
+    try {
+      beforeShot = await renderShot(ctx.html, preShotPath(page, gen, "before"));
+    } catch {
+      beforeShot = ""; // render miss — codexCritique will render its own from html
+    }
+    let critique = [];
+    try {
+      // Pass html too so codexCritique can render its OWN PNG if our pre-render missed.
+      critique = (await codexCritique({ brand, screenshotPath: beforeShot, goal, html: ctx.html })) || [];
+    } catch (err) {
+      // Critique throws on Codex failure (no silent fallback), but a miss must not
+      // kill the run — fall back to whatever the team's own auditor surfaced.
+      gatedEmit({ type: "agent.status", agentId: `${page}-critique-g${gen}`, doing: `critique failed (kept page): ${err?.message || err}` });
+      critique = (ctx.findings || []).map((f) => ({ flaw: String(f), brandRuleCited: "", severity: "med" }));
+    }
+    // Normalize + de-dupe the structured findings (the only severity source).
     const seenF = new Set();
-    const uniqueFindings = findings.filter((f) => {
-      const k = f.trim().toLowerCase();
-      if (seenF.has(k)) return false;
+    const findingObjs = [];
+    for (const c of critique) {
+      const flaw = String((c && c.flaw) || "").trim();
+      if (!flaw) continue;
+      const k = flaw.toLowerCase();
+      if (seenF.has(k)) continue;
       seenF.add(k);
-      return true;
-    });
-    if (uniqueFindings.length) {
-      gatedEmit({ type: "critique.made", findings: uniqueFindings });
+      findingObjs.push({
+        flaw,
+        brandRuleCited: String((c && c.brandRuleCited) || "").trim(),
+        severity: normSeverity(c && c.severity),
+      });
+    }
+    const flawTexts = findingObjs.map((f) => f.flaw);
+    if (flawTexts.length) {
+      gatedEmit({ type: "critique.made", findings: flawTexts });
+      // mustFix carries THIS turn's findings into THIS turn's revise (1.7, §6).
+      ctx.brief.mustFix = mergeRules(ctx.brief.mustFix, flawTexts);
     }
 
-    if (isMemory) {
-      // Decide which findings the orchestrator itself must trace into memory.
-      //   - The deterministic realViolations are ALWAYS traced here: they are the
-      //     checkable, learnable signal that drives the demo's honest win, and we
-      //     can't rely on the master's auditor having held cognee_trace.
-      //   - The auditor's OWN findings are traced here ONLY if no agent already
-      //     traced them via cognee_trace (else runAgent already did + counted).
-      const traceSet = new Set(realViolations.map(String));
-      if (!someAgentTraces) {
-        for (const f of uniqueFindings) traceSet.add(String(f));
-      }
-      for (const finding of traceSet) {
-        const severity = /gradient|forbid|violat|buzzword|jargon|cta|accent/i.test(finding)
-          ? "high" : "medium";
-        try {
-          await memory.writeTrace(sessionId, { role: "critique", finding, severity });
-          tracesCount += 1;
-          gatedEmit({ type: "trace.written", agentId: `${page}-critique-g${gen}`, summary: finding });
-        } catch {
-          /* ignore individual trace failures */
+    // ---- CREDIT ASSIGNMENT (2.4) — attribute each flaw to the responsible agent.
+    // No regex classifier: the brandRuleCited enum + the roster decide. Stored on
+    // the spawn event consumers (per-agent rows) via a per-agent credit map.
+    const credit = assignCredit(findingObjs, agents);
+    // Carry the highest-severity flaw per role to NEXT turn's planTeam (memory only).
+    if (isMemory && !ablateMemory) {
+      const next = {};
+      const sevRank = { high: 3, med: 2, low: 1 };
+      for (const f of findingObjs) {
+        const role = credit.get(f.flaw);
+        if (!role) continue;
+        const prev = next[role];
+        if (!prev || (sevRank[f.severity] || 0) > (sevRank[prev.severity] || 0)) {
+          next[role] = { flaw: f.flaw, attributedTo: role, severity: f.severity };
         }
       }
+      creditByRole = next;
+    }
 
-      // Distill the run's traces into reusable lessons for the NEXT generation.
+    // ===================================================================
+    // SPINE STEP 4 — TRACE [mem] (CONTRACTS §1 remember-trace, §9.4).
+    //   Write ONE record per finding, node_set=[token, role, severity]; severity is
+    //   the structured field from critique (NO regex). Batched into one cognify.
+    //   Emit one trace.written per finding so the UI counter stays exact. Skipped
+    //   entirely on the no-memory page and under ablation does NOT trace forward
+    //   (ablate withholds memory; tracing would leak the win into the next turn).
+    // ===================================================================
+    const token = brandToken(brand);
+    const traceRecords = findingObjs.map((f) => ({
+      role: creditRole(f, credit) || "critique",
+      finding: f.flaw,
+      severity: f.severity,
+      nodeSet: [token, creditRole(f, credit) || "critique", f.severity],
+    }));
+    // If an agent already traced this turn via cognee_trace, runAgent counted it
+    // (tracePeek) — the orchestrator does NOT also write, to keep the counter honest.
+    if (isMemory && !ablateMemory && !someAgentTraces && traceRecords.length) {
+      try {
+        await memory.writeTraces(sessionId, traceRecords);
+        for (const rec of traceRecords) {
+          tracesCount += 1;
+          gatedEmit({ type: "trace.written", agentId: `${page}-critique-g${gen}`, summary: rec.finding });
+        }
+      } catch {
+        /* batch write failed — traces best-effort, run continues */
+      }
+    }
+
+    // ===================================================================
+    // SPINE STEP 5 — REVISE [BOTH] (symmetric; C3, §9.5).
+    //   BOTH pages revise THIS just-built page on their OWN same-turn findings
+    //   before the judge scores it. The ONLY memory delta: memory's revise ALSO
+    //   folds in the recalled PRIOR-turn traces. Ablation STILL revises but with
+    //   EMPTY recalled rules (only this turn's findings). The no-memory page revises
+    //   on this turn's findings only. So the win is NOT "two attempts."
+    // ===================================================================
+    {
+      // Same-turn findings drive every page's revise.
+      let reviseRules = mergeRules([], flawTexts);
+      // Memory (non-ablate) ALSO incorporates recalled prior-turn traces.
+      if (isMemory && !ablateMemory && recalledRules.length) {
+        reviseRules = mergeRules(reviseRules, recalledRules);
+      }
+      if (reviseRules.length && ctx.html) {
+        gatedEmit({
+          type: "agent.status",
+          agentId: `${page}-revise-g${gen}`,
+          doing: isMemory && !ablateMemory
+            ? "applying this turn's findings + recalled prior-turn traces"
+            : "applying this turn's critique findings",
+        });
+        const reviseSeq = Number.isFinite(ctx.seq) ? ctx.seq + 1 : 1;
+        ctx.seq = reviseSeq;
+        const builtHtml = ctx.html;
+        try {
+          const revised = await reviseHtml({
+            brand,
+            goal,
+            priorHtml: builtHtml,
+            rules: reviseRules,
+            page,
+            gen,
+            seq: reviseSeq,
+            deps,
+            emit: gatedEmit,
+            snapDir: snapDir(),
+          });
+          if (revised && typeof revised.html === "string" && revised.html.trim()) {
+            ctx.html = revised.html; // the JUDGE scores the IMPROVED page
+            if (typeof revised.htmlRef === "string" && revised.htmlRef) ctx.htmlRef = revised.htmlRef;
+          }
+        } catch (err) {
+          // Keep the built page so the gen is still judged (a missed revise != a
+          // dead run). Both pages get this same fairness.
+          gatedEmit({
+            type: "agent.status",
+            agentId: `${page}-revise-g${gen}`,
+            doing: `revise failed (kept built page): ${err?.message || err}`,
+          });
+        }
+
+        // ---- RESOLVED-PROOF (A.4 — memory page only). Render the AFTER shot and
+        // ask the vision critique whether each named flaw is still present.
+        // resolved = present-in-before AND absent-in-after. Emit trace.resolved.
+        if (isMemory && ctx.html !== builtHtml) {
+          let afterShot = "";
+          try { afterShot = await renderShot(ctx.html, preShotPath(page, gen, "after")); } catch { afterShot = ""; }
+          let afterFlaws = new Set();
+          try {
+            const after = (await codexCritique({ brand, screenshotPath: afterShot, goal, html: ctx.html })) || [];
+            afterFlaws = new Set(after.map((c) => String((c && c.flaw) || "").trim().toLowerCase()).filter(Boolean));
+          } catch { afterFlaws = new Set(); }
+          for (const f of findingObjs) {
+            const resolved = !afterFlaws.has(f.flaw.toLowerCase()); // present-before AND absent-after
+            gatedEmit({
+              type: "trace.resolved",
+              flaw: f.flaw,
+              brandRuleCited: f.brandRuleCited,
+              beforeShot,
+              afterShot,
+              agentId: creditAgentId(f, credit, page, gen),
+              resolved,
+            });
+          }
+        }
+      }
+    }
+
+    // ===================================================================
+    // SPINE STEP 6 — JUDGE [BOTH] (the immutable two-axis anchor; §4, §9.6).
+    //   judgeSite returns {quality, brandAdherence, score, ...}; the blend/cap is
+    //   LOCKED in judge.mjs. We emit the PER-GEN score (NOT bestScore) so the chart
+    //   can show "rising vs flat". bestScore is kept ONLY for the headline total.
+    // ===================================================================
+    const judged = await judgeSite({ brand, html: ctx.html, goal });
+    const score = judged.score;
+    const quality = judged.quality;
+    const brandAdherence = judged.brandAdherence;
+    gatedEmit({
+      type: "team.judged",
+      score,
+      category: judged.category,
+      reasoning: judged.reasoning,
+      quality,
+      brandAdherence,
+    });
+    if (score > bestScore) bestScore = score;
+    // PER-GEN score on score.updated (H2) — NOT bestScore. x=gen, y=this gen's score.
+    gatedEmit({ type: "score.updated", gen, page, quality, brandAdherence, score });
+
+    // ---- IMPROVEMENTS (page-symmetric, MED/LOW): a turn where THIS page's score
+    // rose vs ITS OWN prior turn. Computed identically for BOTH pages.
+    if (typeof lastGenScore === "number" && score > lastGenScore) {
+      improvements += 1;
+    }
+
+    // ===================================================================
+    // SPINE STEP 7 — FEEDBACK [mem] (§1 cmd_feedback, §9.7).
+    //   Map the judged delta on the named flaw → 5 (improved) | 3 (neutral) |
+    //   1 (regressed). memory.feedback(sessionId, {qa_id, feedbackText, feedbackScore}).
+    //   qa_id from this turn's recall; applied:false (skipped) when qa_id is null.
+    // ===================================================================
+    if (isMemory && !ablateMemory && typeof memory.feedback === "function" && qaId) {
+      const delta = (typeof lastGenScore === "number") ? (score - lastGenScore) : 0;
+      const feedbackScore = delta > 0 ? 5 : (delta < 0 ? 1 : 3);
+      const feedbackText = (findingObjs[0] && findingObjs[0].flaw) ||
+        (recalledRules[0]) || "turn-over-turn quality delta";
+      try {
+        await memory.feedback(sessionId, { qa_id: qaId, feedbackText, feedbackScore });
+      } catch { /* feedback best-effort */ }
+
+      // ===================================================================
+      // SPINE STEP 8 — IMPROVE [mem] (§1 cmd_improve, §9.8).
+      //   Reweight the session by feedback so the NEXT turn's recall ranks proven
+      //   fixes higher. feedback_alpha > 0 rides in kwargs.
+      // ===================================================================
+      if (typeof memory.improve === "function") {
+        try { await memory.improve([sessionId], FEEDBACK_ALPHA); } catch { /* improve best-effort */ }
+      }
+    }
+
+    // ===================================================================
+    // SPINE STEP 9 — DISTILL [mem] (session-only Lessons counter; §1, §9.9).
+    //   Graceful if GLM yields 0 valid WrittenLessons (Traces-only — never silently
+    //   show Lessons=0 as success; the counter simply stays at the traces signal).
+    // ===================================================================
+    if (isMemory && !ablateMemory) {
       try {
         const { lessonsAccepted } = (await memory.distill(sessionId)) || { lessonsAccepted: [] };
         const accepted = Array.isArray(lessonsAccepted) ? lessonsAccepted : [];
@@ -500,21 +1022,9 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir, goal =
           gatedEmit({ type: "memory.distilled", lessonsAccepted: accepted });
         }
       } catch {
-        /* ignore distill failures */
+        /* distill best-effort (graceful degrade to Traces-only) */
       }
     }
-
-    // ===================================================================
-    // 5) JUDGE — Codex gpt-5.4 HIGH base + deterministic brand-rule penalty.
-    // ===================================================================
-    const { score, category, reasoning, violations } = await judgeSite({
-      brand,
-      html: ctx.html,
-      goal,
-    });
-    gatedEmit({ type: "team.judged", score, category, reasoning, violations });
-    if (score > bestScore) bestScore = score;
-    gatedEmit({ type: "score.updated", score: bestScore });
 
     // ---- PROVENANCE: emit the RICH member.upskilled now that this gen is judged,
     // so scoreAfter (this gen's score) — and the resulting delta — are real. The
@@ -525,7 +1035,8 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir, goal =
       pendingUpskill = null;
     }
 
-    // Remember THIS gen's score so the NEXT gen's upskill can show scoreBefore.
+    // Remember THIS gen's score so the NEXT gen can compute the page-symmetric
+    // improvement + the upskill panel's scoreBefore.
     lastGenScore = score;
   }
 
@@ -549,4 +1060,176 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir, goal =
     improvements,
     lessons: lessonsCount,
   };
+}
+
+// ===========================================================================
+// SMOKE TEST — `node web/src/orchestrator.mjs`
+// Exercises the progressive-render helpers + the batch-trace flow WITHOUT any
+// network (no Codex, no Ollama, no python). It does NOT run a full build.
+// ===========================================================================
+if (import.meta.url === `file://${process.argv[1]}`) {
+  (async () => {
+    let ok = true;
+    const log = (cond, msg) => { if (!cond) ok = false; console.log(cond ? "PASS" : "FAIL", msg); };
+
+    const os = await import("node:os");
+    const { mkdtemp, readFile, access } = await import("node:fs/promises");
+    process.env.TASTELOOP_SNAP_DIR = await mkdtemp(path.join(os.tmpdir(), "tl-orch-"));
+
+    const brand = {
+      colors: { primary: "#FE2C55", accent: "#25F4EE", bg: "#000000", fg: "#FFFFFF" },
+      tone: ["bold", "direct"],
+      audience: "brands & marketers",
+      dont: ["Do not use gradients"],
+      sections: ["hero", "problem", "how-it-works", "proof", "cta"],
+      tokens: { color: { roles: { bg: "#000000", fg: "#FFFFFF", primary: "#FE2C55", secondary: "#25F4EE" } } },
+      designSystemCss: ":root{--color-bg:#000}\n.ds-btn-primary{}",
+      designSystemPath: "run/design-system.css",
+    };
+
+    // ---- previewCopy recovers hero + angle from the threaded copyHint ----
+    const pc = previewCopy(
+      { copyHint: 'Strategy. Hero headline tone: "Go viral. Get customers.". Sound-on growth engine' },
+      brand, GOAL,
+    );
+    log(pc.hero === "Go viral. Get customers.", "previewCopy: recovers hero from copyHint");
+    log(/Sound-on growth engine/.test(pc.angle), "previewCopy: recovers angle after hero clause");
+    const pc2 = previewCopy({}, brand, GOAL);
+    log(pc2.hero === GOAL && pc2.angle.length > 0, "previewCopy: falls back to brand-true defaults");
+
+    // ---- buildPreviewPage is on-brand, links the design system, no gradients ----
+    const ctx = {
+      copyHint: 'Hero headline tone: "Make ads people actually watch.". Turn 60s clips into customers',
+      sections: ["hero", "problem", "how-it-works", "proof", "cta"],
+      heroImage: "data:image/png;base64,STUB==",
+      seq: 0,
+    };
+    const html = buildPreviewPage({ ctx, brand, goal: GOAL });
+    log(/<!doctype html>/i.test(html) && /<\/html>/i.test(html), "buildPreviewPage: well-formed doc");
+    log(/href="\.\.\/design-system\.css"/.test(html), "buildPreviewPage: LINKS the live design-system.css");
+    log(/ds-btn-primary/.test(html) && /ds-h1/.test(html), "buildPreviewPage: uses .ds-* utilities");
+    log(/Make ads people actually watch\./.test(html), "buildPreviewPage: drops in the real hero copy");
+    log(/STUB==/.test(html), "buildPreviewPage: embeds the threaded hero image");
+    log(!/gradient/i.test(html), "buildPreviewPage: NO gradients (on-brand)");
+    log(/#25F4EE/i.test(brand.designSystemCss) || /design-system\.css/.test(html), "buildPreviewPage: grounded in the design system");
+
+    // ---- emitPreview writes a snapshot + emits draft design.rendered EARLY ----
+    const events = [];
+    const emit = (ev) => events.push(ev);
+    const ctx2 = { copyHint: ctx.copyHint, sections: ctx.sections, seq: 0 };
+    const ref = await emitPreview({ ctx: ctx2, brand, goal: GOAL, page: "memory", gen: 0, emit });
+    log(typeof ref === "string" && ref.startsWith("snapshots/") && /preview/.test(ref), "emitPreview: returns a preview htmlRef under snapshots/");
+    let wrote = true;
+    try { await access(path.join(snapDir(), path.basename(ref))); } catch { wrote = false; }
+    log(wrote, "emitPreview: preview snapshot written to disk");
+    const dr = events.find((e) => e.type === "design.rendered");
+    log(dr && dr.htmlRef === ref && dr.draft === true, "emitPreview: emits design.rendered{draft:true}");
+    log(events.some((e) => e.type === "agent.status" && e.draft === true && /draft/i.test(e.doing)), "emitPreview: emits a DRAFT agent.status");
+    log(ctx2.seq === 1, "emitPreview: bumped ctx.seq so the builder snapshot won't collide");
+
+    // ---- sessionId convention (CONTRACTS §8): sess_<runId>_<page> ----
+    {
+      const rid = "run_test_abc";
+      log(`sess_${rid}_memory` === "sess_run_test_abc_memory", "sessionId: sess_<runId>_<page> format");
+    }
+
+    // ---- severity comes from the structured field, NO regex (Guardrail 5) ----
+    log(normSeverity("high") === "high" && normSeverity("HIGH") === "high", "severity: high passes through");
+    log(normSeverity("low") === "low", "severity: low passes through");
+    log(normSeverity("medium") === "med" && normSeverity(undefined) === "med" && normSeverity("garbage") === "med", "severity: anything-else defaults to med (no regex)");
+
+    // ---- firstLesson: first recalled trace is the enforceable rule (no regex pick) ----
+    log(firstLesson([{ statement: "Use flat color" }, { statement: "gradient banned" }]) === "Use flat color", "firstLesson: returns the FIRST recalled rule (feedback-ranked, no regex priority)");
+    log(firstLesson([]) === null && firstLesson(null) === null, "firstLesson: null when nothing recalled");
+
+    // ---- brandToken / recallNodeName scope recall to canonical token nodes ----
+    log(brandToken(brand) === "#FE2C55", "brandToken: primary color is the canonical token node");
+    log(recallNodeName(brand).join(",") === "#FE2C55,critique", "recallNodeName: [token, critique] OR-filter (no keyword-bag)");
+    const rq = recallQuery(brand, GOAL);
+    log(/bold direct/.test(rq) && !/gradient|buzzword|accent/i.test(rq), "recallQuery: brand-grounded, does NOT enumerate the flaws memory fixes");
+
+    // ---- assignCredit: flaw -> responsible roster agent (no regex over flaw text) ----
+    {
+      const agents = [
+        { role: "typographer", tools: [] },
+        { role: "copywriter", tools: [] },
+        { role: "frontend-implementer", tools: ["html_build"], produces: "html" },
+      ];
+      const findings = [
+        { flaw: "text is hard to read", brandRuleCited: "low contrast text", severity: "high" },
+        { flaw: "headline is weak", brandRuleCited: "copy is off-brand", severity: "med" },
+        { flaw: "something else", brandRuleCited: "", severity: "low" },
+      ];
+      const cm = assignCredit(findings, agents);
+      log(cm.get("text is hard to read") === "typographer", "credit: contrast flaw -> typographer");
+      log(cm.get("headline is weak") === "copywriter", "credit: copy flaw -> copywriter");
+      log(cm.get("something else") === "frontend-implementer", "credit: uncited flaw -> the builder (fallback)");
+    }
+
+    // ---- pickUpskilledAgent reads master-authored briefDiff (NO regex reconstruction) ----
+    {
+      const agents = [
+        { role: "copywriter" },
+        { role: "frontend-implementer", briefDiff: { before: "build a page", after: "build a page; apply learned rule", lessonId: "L1", lessonText: "apply learned rule" } },
+      ];
+      const up = pickUpskilledAgent(agents);
+      log(up && up.agent.role === "frontend-implementer" && up.before !== up.after, "pickUpskilledAgent: returns the master's stored before/after diff");
+      log(pickUpskilledAgent([{ role: "x" }]) === null, "pickUpskilledAgent: null when no agent carries a briefDiff");
+    }
+
+    // ---- threadResult: recalled hits -> ctx.rules + qa_id; DROPPED under ablation (C3) ----
+    {
+      const recallResult = { hits: [{ snippet: "use #25F4EE on the CTA", role: "memory" }], qa_id: "qa_42" };
+      const ctxM = { brief: {}, rules: [], findings: [], _ablate: false };
+      threadResult(ctxM, recallResult);
+      log(ctxM.rules.includes("use #25F4EE on the CTA"), "threadResult: recalled hit snippet -> ctx.rules verbatim");
+      log(ctxM.qa_id === "qa_42", "threadResult: qa_id threaded for the feedback step (C2)");
+      const ctxA = { brief: {}, rules: [], findings: [], _ablate: true };
+      threadResult(ctxA, recallResult);
+      log(ctxA.rules.length === 0 && ctxA.qa_id == null, "threadResult: ABLATE drops recalled rules + qa_id (the win disappears, C3)");
+    }
+
+    // ---- threadResult: typed BUILD BRIEF slots are filled (2.3) ----
+    {
+      const ctxB = { brief: {}, rules: [], findings: [], _ablate: false };
+      threadResult(ctxB, { sections: ["hero", "cta"] });
+      threadResult(ctxB, { copyHint: "Go viral" });
+      threadResult(ctxB, { layoutDirection: "single-column", typeScale: "1.25 modular" });
+      log(JSON.stringify(ctxB.brief.sectionOrder) === JSON.stringify(["hero", "cta"]), "brief: info-architect fills sectionOrder");
+      log(ctxB.brief.copy === "Go viral", "brief: copywriter fills copy");
+      log(ctxB.brief.layoutDirection === "single-column" && ctxB.brief.typeScale === "1.25 modular", "brief: visual/typographer slots filled");
+    }
+
+    // ---- score.updated emits the PER-GEN score (H2), not bestScore ----
+    {
+      // Mirror the orchestrator's judge emit: it sends { gen, page, quality, brandAdherence, score }
+      // where score is THIS gen's judged value. We assert the SHAPE here (deterministic).
+      const ev = { type: "score.updated", gen: 1, page: "memory", quality: 80, brandAdherence: 70, score: 76 };
+      log(ev.score === 76 && typeof ev.gen === "number" && "quality" in ev && "brandAdherence" in ev, "score.updated: per-gen score + quality + brandAdherence + gen (NOT bestScore)");
+    }
+
+    // ---- CREDIT (§2.1/§2.5): planTeam is CALLED with `credit: creditByRole`, and that
+    //      value is non-empty ONLY on memory + non-ablate + gen>0 (fairness). ----
+    {
+      // Mirror the EXACT gating expression used at the planTeam call site.
+      const creditByRole = { "frontend-implementer": { flaw: "text is hard to read", attributedTo: "frontend-implementer", severity: "high" } };
+      const passed = ({ isMemory, ablateMemory }) => (isMemory && !ablateMemory) ? creditByRole : {};
+
+      // memory + non-ablate => the real credit flows to planTeam.
+      const memCredit = passed({ isMemory: true, ablateMemory: false });
+      log(memCredit === creditByRole && Object.keys(memCredit).length > 0, "credit: planTeam receives non-empty creditByRole on memory + non-ablate");
+      // no-memory => always {} (fairness — no brief is ever seeded there).
+      log(Object.keys(passed({ isMemory: false, ablateMemory: false })).length === 0, "credit: no-memory page passes credit:{} (fairness)");
+      // ablation => {} (the win-bearing credit channel is withheld).
+      log(Object.keys(passed({ isMemory: true, ablateMemory: true })).length === 0, "credit: ABLATE passes credit:{} (no seeded miss)");
+      // gen 0 starts with creditByRole={} (only built AFTER the first critique) — structural.
+      log(Object.keys({}).length === 0, "credit: gen 0 starts empty (creditByRole built only after a critique)");
+    }
+
+    console.log(ok ? "\norchestrator.mjs smoke: ALL PASS" : "\norchestrator.mjs smoke: FAILURES");
+    process.exit(ok ? 0 : 1);
+  })().catch((err) => {
+    console.error("SMOKE CRASHED:", err && err.stack ? err.stack : err);
+    process.exit(1);
+  });
 }

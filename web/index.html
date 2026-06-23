@@ -77,6 +77,11 @@
       white-space: nowrap;
     }
     .skill-chip.tool { background: rgba(254,44,85,0.10); color: #ff7793; border-color: rgba(254,44,85,0.25); }
+    /* "orchestrator-invoked skill routes" caption above the chips (4.3) */
+    .skill-routes-label {
+      font-size: 7.5px; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase;
+      color: rgba(255,255,255,0.32); margin-top: 3px; margin-bottom: 1px;
+    }
     /* Master-authored prompt reveal (expand on click) */
     .agent-prompt {
       display: none;
@@ -231,6 +236,162 @@
       margin-top: 14px; text-align: center;
       font-size: 10px; letter-spacing: 0.06em; color: rgba(255,255,255,0.3);
     }
+
+    /* ===== PER-AGENT STATS (recall-hits / traces) ===== */
+    .agent-stats { display: flex; gap: 5px; margin-top: 2px; }
+    .stat-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 8px; font-weight: 900; letter-spacing: 0.02em;
+      padding: 1px 5px; border-radius: 9999px;
+    }
+    .stat-pill .stat-lbl { text-transform: uppercase; opacity: 0.6; }
+    .stat-pill .stat-val { font-variant-numeric: tabular-nums; }
+    .stat-pill.recall { background: rgba(37,244,238,0.10); color: #25F4EE; border: 1px solid rgba(37,244,238,0.22); }
+    .stat-pill.trace { background: rgba(255,221,87,0.10); color: #ffdd57; border: 1px solid rgba(255,221,87,0.22); }
+
+    /* ===== GRANT PROVENANCE (lesson -> skill) ===== */
+    .grant-prov { margin-top: 3px; display: flex; flex-direction: column; gap: 3px; }
+    .grant-prov-row {
+      font-size: 9px; line-height: 1.3; color: rgba(255,255,255,0.55);
+      border-left: 2px solid rgba(37,244,238,0.4); padding-left: 6px;
+    }
+    .grant-prov-row .gp-skill { color: #25F4EE; font-weight: 800; }
+    .grant-prov-row .gp-from { color: rgba(255,255,255,0.4); }
+    .grant-prov-row .gp-lesson { color: rgba(255,221,87,0.85); font-style: italic; }
+
+    /* ===== CREDIT ASSIGNMENT (flaw attributed to this agent) ===== */
+    .credit-row {
+      margin-top: 3px; font-size: 9px; line-height: 1.35;
+      border-radius: 6px; padding: 4px 6px;
+      background: rgba(254,44,85,0.08); border: 1px solid rgba(254,44,85,0.20);
+      color: rgba(255,255,255,0.7);
+    }
+    .credit-row .credit-lbl {
+      font-size: 7.5px; font-weight: 900; letter-spacing: 0.1em; text-transform: uppercase;
+      color: #ff7793; display: block; margin-bottom: 1px;
+    }
+
+    /* ===== TRACE.RESOLVED BEFORE/AFTER PANEL ===== */
+    #resolvedScrim {
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(3,3,6,0.74); backdrop-filter: blur(6px);
+      display: none; animation: scrimIn 0.25s ease both;
+    }
+    #resolvedScrim.show { display: block; }
+    #resolvedPanel {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(1000px, 94vw); max-height: 90vh; overflow-y: auto;
+      z-index: 51; border-radius: 22px;
+      border: 1px solid rgba(52,211,153,0.45);
+      background:
+        radial-gradient(900px 360px at 0% -20%, rgba(52,211,153,0.14), transparent 60%),
+        radial-gradient(700px 320px at 110% 0%, rgba(37,244,238,0.10), transparent 55%),
+        #0a0a0f;
+      box-shadow: 0 0 0 1px rgba(52,211,153,0.10), 0 40px 120px rgba(0,0,0,0.7), 0 0 80px rgba(52,211,153,0.16);
+      animation: focusIn 0.4s cubic-bezier(.2,.85,.25,1) both;
+      padding: 22px 24px 24px;
+    }
+    .resolved-flaw { font-size: 22px; font-weight: 900; letter-spacing: -0.01em; line-height: 1.15; color: #fff; }
+    .resolved-rule { font-size: 11px; color: rgba(255,255,255,0.55); }
+    .resolved-rule-lbl {
+      font-size: 8px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase;
+      color: rgba(37,244,238,0.8); margin-right: 5px;
+    }
+    .resolved-badge {
+      font-size: 11px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase;
+      padding: 6px 12px; border-radius: 9999px; white-space: nowrap;
+    }
+    .resolved-badge.ok { background: rgba(52,211,153,0.16); color: #6ee7b7; border: 1px solid rgba(52,211,153,0.4); }
+    .resolved-badge.no { background: rgba(254,44,85,0.14); color: #ff7793; border: 1px solid rgba(254,44,85,0.4); }
+    .shot-wrap { margin-top: 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 720px) { .shot-wrap { grid-template-columns: 1fr; } }
+    .shot-box {
+      border-radius: 12px; overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.12); background: #fff;
+      aspect-ratio: 16/10;
+    }
+    .shot-box.after { border-color: rgba(52,211,153,0.4); }
+    .shot-box img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+
+    /* ===== GRAPH VIZ ===== */
+    #graphToggle {
+      position: fixed; right: 18px; bottom: 18px; z-index: 40;
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 9px 14px; border-radius: 9999px;
+      font-size: 11px; font-weight: 900; letter-spacing: 0.08em;
+      color: #25F4EE; background: rgba(10,10,15,0.92);
+      border: 1px solid rgba(37,244,238,0.4);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5), 0 0 20px rgba(37,244,238,0.12);
+      cursor: pointer; user-select: none;
+    }
+    #graphToggle:hover { background: rgba(37,244,238,0.10); }
+    #graphToggle .graph-toggle-dot {
+      width: 7px; height: 7px; border-radius: 9999px; background: #25F4EE;
+      box-shadow: 0 0 10px #25F4EE;
+    }
+    #graphToggle.has-data { animation: pulseRing 1.8s infinite; }
+    #graphScrim {
+      position: fixed; inset: 0; z-index: 52;
+      background: rgba(3,3,6,0.8); backdrop-filter: blur(8px);
+      display: none; animation: scrimIn 0.25s ease both;
+    }
+    #graphScrim.show { display: block; }
+    #graphPanel {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: min(820px, 94vw); max-height: 92vh; overflow: auto;
+      z-index: 53; border-radius: 22px;
+      border: 1px solid rgba(37,244,238,0.45);
+      background:
+        radial-gradient(900px 360px at 0% -20%, rgba(37,244,238,0.14), transparent 60%),
+        #0a0a0f;
+      box-shadow: 0 40px 120px rgba(0,0,0,0.7), 0 0 80px rgba(37,244,238,0.16);
+      animation: focusIn 0.4s cubic-bezier(.2,.85,.25,1) both;
+      padding: 22px 24px 24px;
+    }
+    .graph-legend { display: flex; gap: 16px; margin: 12px 0 6px; flex-wrap: wrap; }
+    .glegend { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; color: rgba(255,255,255,0.6); }
+    .gdot { width: 11px; height: 11px; border-radius: 9999px; display: inline-block; }
+    .gdot.token { background: #25F4EE; box-shadow: 0 0 8px rgba(37,244,238,0.7); }
+    .gdot.lesson { background: #ffdd57; box-shadow: 0 0 8px rgba(255,221,87,0.6); }
+    .gedge { width: 16px; height: 0; border-top: 2px dashed rgba(255,255,255,0.3); display: inline-block; }
+    #graphSvg { width: 100%; height: auto; display: block; }
+    .gnode-token { fill: #25F4EE; stroke: #050507; stroke-width: 2; filter: drop-shadow(0 0 6px rgba(37,244,238,0.6)); }
+    .gnode-lesson { fill: #ffdd57; stroke: #050507; stroke-width: 1.5; }
+    .gnode-label { font-size: 10px; font-weight: 900; fill: #050507; }
+    .glesson-label { font-size: 8px; font-weight: 600; fill: rgba(255,255,255,0.78); }
+    .gedge-line { stroke: rgba(255,255,255,0.28); stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .graph-empty { margin-top: 14px; font-size: 11px; color: rgba(255,255,255,0.4); font-weight: 600; }
+
+    /* cards = name only by default; CLICK a card to expand its prompt + skills */
+    .strategy-banner, .js-doing-global { display: none !important; }
+    .agent-card { padding: 4px 8px !important; cursor: pointer !important; }
+    .agent-card .js-skills,
+    .agent-card .js-skills-label,
+    .agent-card .js-doing,
+    .agent-card .js-prompt,
+    .agent-card .js-version,
+    .agent-card .js-agent-stats,
+    .agent-card .js-grant-prov,
+    .agent-card .js-credit,
+    .js-prompt-toggle { display: none !important; }
+    .agent-card.prompt-open { flex: 3 1 0; }
+    .agent-card.prompt-open .js-skills { display: flex !important; }
+    .agent-card.prompt-open .js-skills-label:not(.hidden) { display: block !important; }
+    .agent-card.prompt-open .js-doing,
+    .agent-card.prompt-open .js-prompt,
+    .agent-card.prompt-open .js-version { display: block !important; }
+    /* recall/traces pills + provenance + credit show when the card is expanded AND populated */
+    .agent-card.prompt-open .js-agent-stats:not(.hidden) { display: flex !important; }
+    .agent-card.prompt-open .js-grant-prov:not(.hidden) { display: flex !important; }
+    .agent-card.prompt-open .js-credit:not(.hidden) { display: block !important; }
+    /* collapsed cards: glow the dot if the agent has recall hits or credit (memory provenance) */
+    .agent-card.has-recall .js-dot { background: #25F4EE; box-shadow: 0 0 8px rgba(37,244,238,0.7); }
+    /* single-line agent lane: equal-width cards in one row; older ones fade/collapse out */
+    .js-grid > .agent-card { flex: 1 1 0; min-width: 0; transition: opacity .35s ease, flex-basis .35s ease, flex-grow .35s ease, margin .35s ease, padding .35s ease; }
+    .js-grid > .agent-card .js-role { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .agent-card.agent-leaving { opacity: 0; flex: 0 0 0 !important; min-width: 0; margin: 0; padding-left: 0 !important; padding-right: 0 !important; overflow: hidden; pointer-events: none; }
   </style>
 </head>
 <body class="min-h-screen overflow-hidden">
@@ -263,7 +424,7 @@
 
       <button id="restartBtn"
         class="px-4 py-1.5 rounded-lg bg-ttpink text-white text-sm font-extrabold hover:brightness-110 active:scale-95 transition">
-        ⟲ Restart
+        ⟲ Replay
       </button>
     </div>
   </header>
@@ -293,12 +454,13 @@
       <div class="flex items-center justify-between px-5 py-3 border-b border-white/10">
         <div class="flex items-center gap-2">
           <h2 class="text-lg md:text-xl font-black tracking-tight js-title"></h2>
-          <span class="js-badge text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full"></span>
         </div>
         <!-- SCORE -->
-        <div class="text-right leading-none">
-          <div class="text-[10px] uppercase tracking-widest text-white/40 font-bold">Score</div>
-          <div class="js-score tabular text-4xl md:text-5xl font-black">0</div>
+        <div class="flex items-end gap-3">
+          <div class="text-right leading-none">
+            <div class="text-[10px] uppercase tracking-widest text-white/40 font-bold">Score</div>
+            <div class="js-score tabular text-4xl md:text-5xl font-black">0</div>
+          </div>
         </div>
       </div>
 
@@ -340,7 +502,7 @@
           <div class="text-[10px] uppercase tracking-widest text-white/40 font-bold">Studio · master-authored team</div>
           <div class="js-doing-global text-[11px] text-white/50 truncate max-w-[60%] text-right"></div>
         </div>
-        <div class="js-grid grid grid-cols-5 gap-2"></div>
+        <div class="js-grid flex gap-2 overflow-hidden"></div>
       </div>
 
       <!-- LIVE IFRAME -->
@@ -350,7 +512,7 @@
             Waiting for first render…
           </div>
           <iframe class="js-iframe w-full h-full block" title="live site preview"
-            sandbox="allow-same-origin" loading="lazy"></iframe>
+            sandbox="allow-scripts allow-same-origin" loading="lazy"></iframe>
         </div>
       </div>
     </div>
@@ -366,13 +528,80 @@
         <span class="js-prompt-toggle prompt-toggle ml-auto hidden">PROMPT ▸</span>
         <span class="js-version text-[9px] font-bold text-white/40 tabular ml-1.5"></span>
       </div>
-      <!-- Granted skills/tools from agent.spawned.skills -->
+      <!-- Per-agent recall-hits + traces counts (memory provenance, 4.1) -->
+      <div class="js-agent-stats agent-stats hidden">
+        <span class="stat-pill recall"><span class="stat-lbl">recall</span><span class="js-agent-recall stat-val">0</span></span>
+        <span class="stat-pill trace"><span class="stat-lbl">traces</span><span class="js-agent-traces stat-val">0</span></span>
+      </div>
+      <!-- Granted skills as orchestrator-invoked skill ROUTES (4.3 — registry
+           dispatch, not "the agent chose a tool"). Label shows on expand. -->
+      <div class="js-skills-label skill-routes-label hidden">orchestrator-invoked skill routes</div>
       <div class="js-skills flex flex-wrap gap-1 hidden"></div>
+      <!-- Grant provenance: why each memory-driven tool was granted (4.2) -->
+      <div class="js-grant-prov grant-prov hidden"></div>
+      <!-- Credit assignment: the vision flaw attributed to this agent (2.4 / 4.2) -->
+      <div class="js-credit credit-row hidden"></div>
       <div class="js-doing text-[10px] text-white/50 leading-tight line-clamp-2 min-h-[1.6em]"></div>
       <!-- Master-authored prompt (agent.spawned.prompt) -->
       <div class="js-prompt agent-prompt"></div>
     </div>
   </template>
+
+  <!-- ===== TRACE.RESOLVED BEFORE/AFTER PANEL (A.4 / 4.4 — memory page) ===== -->
+  <!-- Pops on a trace.resolved event: the named flaw, the cited brand rule, and the
+       pre-revise vs post-revise screenshots side by side, visually evidenced. -->
+  <div id="resolvedScrim"></div>
+  <div id="resolvedPanel" role="dialog" aria-modal="true" aria-label="Flaw resolved" style="display:none;">
+    <span id="resolvedClose" class="upskill-close" title="Dismiss">×</span>
+
+    <div class="flex items-start justify-between gap-4 flex-wrap">
+      <div class="min-w-0">
+        <div class="upskill-eyebrow">Flaw resolved · before → after</div>
+        <div class="resolved-flaw mt-2" id="resolvedFlaw"></div>
+        <div class="resolved-rule mt-1" id="resolvedRule" style="display:none;">
+          <span class="resolved-rule-lbl">brand rule</span>
+          <span id="resolvedRuleText"></span>
+        </div>
+      </div>
+      <div id="resolvedBadge" class="resolved-badge" style="display:none;"></div>
+    </div>
+
+    <!-- Before / after screenshots -->
+    <div class="shot-wrap">
+      <div>
+        <div class="diff-col-label before">Before · pre-revise</div>
+        <div class="shot-box"><img id="resolvedBefore" alt="before revise" /></div>
+      </div>
+      <div>
+        <div class="diff-col-label after">After · post-revise</div>
+        <div class="shot-box after"><img id="resolvedAfter" alt="after revise" /></div>
+      </div>
+    </div>
+
+    <div class="provenance" id="resolvedProvenance" style="display:none;">
+      <span>fixed by</span>
+      <span class="prov-role" id="resolvedAgent"></span>
+    </div>
+
+    <div class="upskill-hint">click anywhere to dismiss</div>
+  </div>
+
+  <!-- ===== GRAPH VIZ TOGGLE + PANEL (token nodes + lesson edges; Phase 3 / 4.4) ===== -->
+  <button id="graphToggle" title="Show the memory graph (token nodes + lesson edges)">
+    <span class="graph-toggle-dot"></span> GRAPH
+  </button>
+  <div id="graphScrim"></div>
+  <div id="graphPanel" role="dialog" aria-modal="true" aria-label="Memory graph" style="display:none;">
+    <span id="graphClose" class="upskill-close" title="Dismiss">×</span>
+    <div class="upskill-eyebrow">Memory graph · brand tokens accumulate lesson edges</div>
+    <div class="graph-legend">
+      <span class="glegend"><span class="gdot token"></span> brand token</span>
+      <span class="glegend"><span class="gdot lesson"></span> lesson / trace</span>
+      <span class="glegend"><span class="gedge"></span> anchored-on edge</span>
+    </div>
+    <svg id="graphSvg" viewBox="0 0 720 440" aria-label="memory graph"></svg>
+    <div id="graphEmpty" class="graph-empty">No token-anchored lessons recalled yet — the memory page builds this as it traces.</div>
+  </div>
 
   <!-- ===== UPSKILL FOCUS PANEL (member.upskilled climax) ===== -->
   <div id="upskillScrim"></div>

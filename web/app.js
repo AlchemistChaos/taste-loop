@@ -8,30 +8,32 @@
 (function () {
   const PAGES = ["no-memory", "memory"];
   const TURN_CAP = 20;
+  // Single-line agent lane: show only the most recent N spawned agents; older
+  // ones fade/collapse out so the lane never grows past one row.
+  const MAX_LANE = 5;
 
   // -------- Page label + theme config --------
   const PAGE_META = {
     "no-memory": {
-      title: "PAGE 1 — NO MEMORY",
-      badge: "STATELESS",
-      badgeClass: "bg-white/10 text-white/60",
+      title: "Page A",
       borderClass: "border-white/10",
       // dim, never-climbing accent
       counterColor: "text-white/35",
     },
     memory: {
-      title: "PAGE 2 — COGNEE MEMORY",
-      badge: "LEARNING",
-      badgeClass: "bg-ttcyan/15 text-ttcyan",
+      title: "Page B",
       borderClass: "border-ttcyan/30",
       counterColor: "text-ttcyan",
     },
   };
 
   // -------- DOM helpers --------
-  const $ = (sel, root = document) => root.querySelector(sel);
-  const colTpl = $("#colTemplate");
-  const agentTpl = $("#agentTemplate");
+  const HAS_DOM = typeof document !== "undefined";
+  const $ = (sel, root) => (root || (HAS_DOM ? document : null)) ?.querySelector(sel) ?? null;
+  // Resolved only in the browser; under Node (smoke test) these stay null and the
+  // browser-only render paths (buildColumn/getOrCreateAgent) never run.
+  const colTpl = HAS_DOM ? $("#colTemplate") : null;
+  const agentTpl = HAS_DOM ? $("#agentTemplate") : null;
 
   // Per-page UI references + state
   const ui = {};       // ui[page] = { els..., agents: Map(agentId -> {card, els}) }
@@ -44,7 +46,7 @@
       traces: 0,
       improvements: 0,
       lessons: 0,
-      score: 0,
+      score: 0,            // headline (best score, from run.finished.totals)
       latestHtmlRef: null,
     };
   }
@@ -57,10 +59,6 @@
     const titleEl = $(".js-title", node);
     titleEl.textContent = meta.title;
     titleEl.classList.add(page === "memory" ? "text-ttcyan" : "text-white");
-
-    const badge = $(".js-badge", node);
-    badge.textContent = meta.badge;
-    badge.className = "js-badge text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full " + meta.badgeClass;
 
     const refs = {
       root: node,
@@ -132,6 +130,9 @@
       grid.appendChild(chip);
     });
     grid.classList.remove("hidden");
+    // 4.3: chips are orchestrator-invoked skill ROUTES (registry dispatch) — show
+    // the clarifying caption alongside them.
+    if (els.skillsLabel) els.skillsLabel.classList.remove("hidden");
   }
 
   // Wire/show the master-authored prompt. Clicking the card toggles it open.
@@ -159,6 +160,8 @@
         if (role) entry.role.textContent = role;
         if (meta.skills && entry.skills.classList.contains("hidden")) renderSkills(entry, meta.skills);
         if (meta.prompt && !entry.card.classList.contains("has-prompt")) renderPrompt(entry, meta.prompt);
+        if (meta.grantProvenance) renderGrantProvenance(entry, meta.grantProvenance);
+        if (meta.credit) renderCredit(entry, meta.credit);
       }
       return entry;
     }
@@ -173,6 +176,16 @@
       skills: $(".js-skills", card),
       prompt: $(".js-prompt", card),
       promptToggle: $(".js-prompt-toggle", card),
+      skillsLabel: $(".js-skills-label", card),
+      // per-agent provenance hooks (4.1 / 4.2)
+      agentStats: $(".js-agent-stats", card),
+      recallVal: $(".js-agent-recall", card),
+      tracesVal: $(".js-agent-traces", card),
+      grantProv: $(".js-grant-prov", card),
+      credit: $(".js-credit", card),
+      // per-agent running counters
+      recallHits: 0,
+      traceCount: 0,
     };
     els.role.textContent = role || agentId || "agent";
     if (version !== undefined && version !== null && version !== "") {
@@ -181,11 +194,75 @@
     if (meta) {
       if (meta.skills) renderSkills(els, meta.skills);
       if (meta.prompt) renderPrompt(els, meta.prompt);
+      if (meta.grantProvenance) renderGrantProvenance(els, meta.grantProvenance);
+      if (meta.credit) renderCredit(els, meta.credit);
     }
     refs.grid.appendChild(card);
     entry = els;
     refs.agentMap.set(agentId, entry);
+    pruneAgentLane(refs);
     return entry;
+  }
+
+  // Keep only the most recent MAX_LANE agent cards in the lane; fade/collapse the
+  // older ones out and drop their agentMap entry (so late events don't revive them).
+  function pruneAgentLane(refs) {
+    const live = Array.from(refs.grid.children).filter((c) => !c.classList.contains("agent-leaving"));
+    for (let i = 0; i < live.length - MAX_LANE; i++) {
+      const oldest = live[i];
+      for (const [id, e] of refs.agentMap) { if (e.card === oldest) { refs.agentMap.delete(id); break; } }
+      oldest.classList.add("agent-leaving");
+      setTimeout(() => { if (oldest.parentNode) oldest.parentNode.removeChild(oldest); }, 400);
+    }
+  }
+
+  // Update an agent card's recall-hits / traces pills (memory provenance, 4.1).
+  function bumpAgentStat(els, kind, by) {
+    if (!els) return;
+    if (kind === "recall") {
+      els.recallHits += by;
+      if (els.recallVal) els.recallVal.textContent = String(els.recallHits);
+      if (els.recallHits > 0) els.card.classList.add("has-recall");
+    } else if (kind === "trace") {
+      els.traceCount += by;
+      if (els.tracesVal) els.tracesVal.textContent = String(els.traceCount);
+    }
+    // Reveal the stats row once anything is non-zero.
+    if ((els.recallHits > 0 || els.traceCount > 0) && els.agentStats) {
+      els.agentStats.classList.remove("hidden");
+    }
+  }
+
+  // Grant provenance: why each memory-driven tool was granted (4.2).
+  // grantProvenance = [{ skill, fromLesson }]
+  function renderGrantProvenance(els, list) {
+    if (!els || !els.grantProv || !Array.isArray(list) || !list.length) return;
+    els.grantProv.innerHTML = "";
+    list.forEach((g) => {
+      if (!g) return;
+      const skill = typeof g.skill === "string" ? g.skill : "";
+      const lesson = typeof g.fromLesson === "string" ? g.fromLesson : "";
+      if (!skill && !lesson) return;
+      const row = document.createElement("div");
+      row.className = "grant-prov-row";
+      row.innerHTML =
+        '<span class="gp-skill">' + escapeHtml(skill || "skill") + "</span>" +
+        ' <span class="gp-from">granted from</span> ' +
+        '<span class="gp-lesson">' + escapeHtml(lesson || "(lesson)") + "</span>";
+      els.grantProv.appendChild(row);
+    });
+    if (els.grantProv.children.length) els.grantProv.classList.remove("hidden");
+  }
+
+  // Credit assignment: the vision flaw attributed to this agent (2.4 / 4.2).
+  // credit = { flaw, attributedTo }
+  function renderCredit(els, credit) {
+    if (!els || !els.credit || !credit || typeof credit !== "object") return;
+    const flaw = typeof credit.flaw === "string" ? credit.flaw.trim() : "";
+    if (!flaw) return;
+    els.credit.innerHTML =
+      '<span class="credit-lbl">attributed flaw</span>' + escapeHtml(flaw);
+    els.credit.classList.remove("hidden");
   }
 
   function markActive(page, agentId) {
@@ -222,11 +299,21 @@
     }
   }
 
+  // -------- Shared SVG helper (used by the memory graph viz) --------
+  const SVGNS = "http://www.w3.org/2000/svg";
+  function svgEl(name, attrs) {
+    const el = document.createElementNS(SVGNS, name);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
   function setIframe(page, htmlRef) {
     if (!htmlRef) return;
     const refs = ui[page];
     state[page].latestHtmlRef = htmlRef;
-    const src = "run/" + String(htmlRef).replace(/^\/+/, "");
+    // Cache-bust per run: snapshot filenames repeat across runs (memory-g0-s2.html…),
+    // so without this the browser shows the PREVIOUS run's cached render.
+    const src = "run/" + String(htmlRef).replace(/^\/+/, "") + (lastRunId ? "?r=" + encodeURIComponent(lastRunId) : "");
     if (refs.iframe.getAttribute("src") !== src) {
       refs.iframe.setAttribute("src", src);
     }
@@ -401,6 +488,255 @@
     return true;
   }
 
+  // -------- trace.resolved before/after panel (A.4 / 4.4) --------
+  const resolved = {};
+  let resolvedWired = false;
+  let resolvedTimer = null;
+
+  function resolvedRefs() {
+    if (resolved._ready) return resolved;
+    resolved.scrim = $("#resolvedScrim");
+    resolved.panel = $("#resolvedPanel");
+    resolved.close = $("#resolvedClose");
+    resolved.flaw = $("#resolvedFlaw");
+    resolved.rule = $("#resolvedRule");
+    resolved.ruleText = $("#resolvedRuleText");
+    resolved.badge = $("#resolvedBadge");
+    resolved.before = $("#resolvedBefore");
+    resolved.after = $("#resolvedAfter");
+    resolved.provenance = $("#resolvedProvenance");
+    resolved.agent = $("#resolvedAgent");
+    resolved._ready = !!resolved.panel;
+    return resolved;
+  }
+
+  function closeResolved() {
+    const r = resolvedRefs();
+    if (!r._ready) return;
+    r.scrim.classList.remove("show");
+    r.panel.style.display = "none";
+    if (resolvedTimer) { clearTimeout(resolvedTimer); resolvedTimer = null; }
+  }
+
+  function wireResolved() {
+    if (resolvedWired) return;
+    const r = resolvedRefs();
+    if (!r._ready) return;
+    resolvedWired = true;
+    r.close.addEventListener("click", closeResolved);
+    r.scrim.addEventListener("click", closeResolved);
+    r.panel.addEventListener("click", (e) => { if (e.target !== r.close) closeResolved(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeResolved(); });
+  }
+
+  // Resolve a screenshot ref to a servable URL (same convention as setIframe).
+  function shotSrc(ref) {
+    if (!ref || typeof ref !== "string") return "";
+    if (/^(https?:|data:)/.test(ref)) return ref;
+    return "run/" + ref.replace(/^\/+/, "");
+  }
+
+  // ev = { flaw, brandRuleCited, beforeShot, afterShot, agentId, resolved }
+  function showResolvedPanel(ev) {
+    const r = resolvedRefs();
+    if (!r._ready) return false;
+    // Need at least one screenshot to be a "before/after" panel; otherwise no-op.
+    const beforeSrc = shotSrc(ev.beforeShot);
+    const afterSrc = shotSrc(ev.afterShot);
+    if (!beforeSrc && !afterSrc) return false;
+    wireResolved();
+
+    r.flaw.textContent = typeof ev.flaw === "string" ? ev.flaw : "(flaw)";
+
+    const rule = typeof ev.brandRuleCited === "string" ? ev.brandRuleCited.trim() : "";
+    if (rule) { r.ruleText.textContent = rule; r.rule.style.display = ""; }
+    else { r.rule.style.display = "none"; }
+
+    if (typeof ev.resolved === "boolean") {
+      r.badge.textContent = ev.resolved ? "resolved ✓" : "still present";
+      r.badge.className = "resolved-badge " + (ev.resolved ? "ok" : "no");
+      r.badge.style.display = "";
+    } else {
+      r.badge.style.display = "none";
+    }
+
+    if (beforeSrc) { r.before.src = beforeSrc; r.before.parentElement.style.display = ""; }
+    else { r.before.removeAttribute("src"); }
+    if (afterSrc) { r.after.src = afterSrc; r.after.parentElement.style.display = ""; }
+    else { r.after.removeAttribute("src"); }
+
+    const agentId = typeof ev.agentId === "string" ? ev.agentId : "";
+    if (agentId) { r.agent.textContent = agentId; r.provenance.style.display = ""; }
+    else { r.provenance.style.display = "none"; }
+
+    r.scrim.classList.add("show");
+    r.panel.style.display = "";
+    r.panel.style.animation = "none";
+    void r.panel.offsetWidth;
+    r.panel.style.animation = "";
+
+    if (resolvedTimer) clearTimeout(resolvedTimer);
+    resolvedTimer = setTimeout(closeResolved, 9000);
+    return true;
+  }
+
+  // -------- Graph viz: token nodes + lesson edges (Phase 3 / 4.4) --------
+  // Accumulated from memory-page signals: brand tokens (from grant provenance /
+  // trace tags) become token nodes; recalled lessons + resolved flaws hang off
+  // them as lesson edges. We mine tokens cheaply from event text (#hex, no-X, etc).
+  const graph = {
+    tokens: new Map(), // token -> { lessons: Set<string> }
+    _wired: false,
+  };
+
+  function graphRefs() {
+    if (graph._refsReady) return graph;
+    graph.toggle = $("#graphToggle");
+    graph.scrim = $("#graphScrim");
+    graph.panel = $("#graphPanel");
+    graph.close = $("#graphClose");
+    graph.svg = $("#graphSvg");
+    graph.empty = $("#graphEmpty");
+    graph._refsReady = !!graph.panel;
+    return graph;
+  }
+
+  // Pull candidate brand-token strings out of a finding/lesson/rule so each becomes
+  // a per-token graph node in the UI. Hex colors + "no-gradient"-style rule slugs are
+  // mined from free text (recalled snippets, resolved flaws). If a statement happens
+  // to carry a typed "BRAND <KIND> token <node> …" prefix, the canonical node id is
+  // mined directly from that prefix too (covering FONT/SECTION/SPACING/non-"no-" rule
+  // tokens that the hex/no-X heuristics alone would otherwise collapse onto the
+  // generic "brand" hub).
+  function mineTokens(text) {
+    const out = [];
+    if (!text || typeof text !== "string") return out;
+    const seen = new Set();
+    const push = (t) => {
+      const k = typeof t === "string" ? t.trim().toLowerCase() : "";
+      if (!k || seen.has(k)) return;
+      seen.add(k);
+      out.push(k);
+    };
+    // 1) Typed Phase-3 grounding/lesson statements name the canonical node verbatim:
+    //    "BRAND COLOR token #25F4EE …", "BRAND FONT token sofia-pro …",
+    //    "BRAND SPACING token s0=8 …", "BRAND STRUCTURE token hero …".
+    //    Capture the node id right after "token " (the slug/hex/s<i>, up to '=' / space).
+    const typed = text.matchAll(/\bBRAND\s+[A-Z]+\s+token\s+([#a-z0-9][a-z0-9_-]*)/gi);
+    for (const m of typed) push(m[1]);
+    // 2) Hex colors (#RRGGBB) from any text — typed or free-form.
+    const hex = text.match(/#[0-9a-fA-F]{3,8}\b/g);
+    if (hex) hex.forEach(push);
+    // 3) "no-gradient"-style rule slugs from free text without the typed prefix.
+    const kebab = text.match(/\bno-[a-z]+\b/gi);
+    if (kebab) kebab.forEach(push);
+    return out;
+  }
+
+  // Attach a lesson/finding to any tokens it mentions. If it mentions none, anchor
+  // it under a generic "brand" node so the graph still shows the accumulation.
+  function graphAddLesson(text) {
+    const lesson = typeof text === "string" ? text.trim() : "";
+    if (!lesson) return;
+    let toks = mineTokens(lesson);
+    if (!toks.length) toks = ["brand"];
+    toks.forEach((tk) => {
+      if (!graph.tokens.has(tk)) graph.tokens.set(tk, { lessons: new Set() });
+      // cap lessons per node so the viz stays legible
+      const node = graph.tokens.get(tk);
+      if (node.lessons.size < 4) node.lessons.add(lesson.length > 64 ? lesson.slice(0, 61) + "…" : lesson);
+    });
+    updateGraphToggle();
+  }
+
+  // Register explicit token nodes (e.g. from grant provenance / brand ingest).
+  function graphAddToken(tk) {
+    const t = typeof tk === "string" ? tk.trim().toLowerCase() : "";
+    if (!t) return;
+    if (!graph.tokens.has(t)) graph.tokens.set(t, { lessons: new Set() });
+    updateGraphToggle();
+  }
+
+  function updateGraphToggle() {
+    const g = graphRefs();
+    if (!g.toggle) return;
+    const has = graph.tokens.size > 0;
+    g.toggle.classList.toggle("has-data", has);
+  }
+
+  function renderGraph() {
+    const g = graphRefs();
+    if (!g.svg) return;
+    g.svg.innerHTML = "";
+    const tokens = Array.from(graph.tokens.entries());
+    if (!tokens.length) {
+      g.empty.style.display = "";
+      return;
+    }
+    g.empty.style.display = "none";
+
+    const W = 720, H = 440, cx = W / 2, cy = H / 2;
+    const ringR = Math.min(W, H) / 2 - 70;
+    const n = tokens.length;
+
+    tokens.forEach(([tk, node], i) => {
+      const ang = (i / n) * Math.PI * 2 - Math.PI / 2;
+      const tx = cx + Math.cos(ang) * ringR;
+      const ty = cy + Math.sin(ang) * ringR;
+
+      // lesson satellites around the token
+      const lessons = Array.from(node.lessons);
+      lessons.forEach((lz, j) => {
+        const subAng = ang + (j - (lessons.length - 1) / 2) * 0.5;
+        const lx = tx + Math.cos(subAng) * 56;
+        const ly = ty + Math.sin(subAng) * 56;
+        g.svg.appendChild(svgEl("line", { x1: tx, y1: ty, x2: lx, y2: ly, class: "gedge-line" }));
+        g.svg.appendChild(svgEl("circle", { cx: lx, cy: ly, r: 5, class: "gnode-lesson" }));
+        const ll = svgEl("text", { x: lx, y: ly - 9, class: "glesson-label", "text-anchor": "middle" });
+        ll.textContent = lz.length > 22 ? lz.slice(0, 21) + "…" : lz;
+        g.svg.appendChild(ll);
+      });
+
+      // edge from center "brand" hub to the token
+      g.svg.appendChild(svgEl("line", { x1: cx, y1: cy, x2: tx, y2: ty, class: "gedge-line" }));
+      // token node
+      g.svg.appendChild(svgEl("circle", { cx: tx, cy: ty, r: 16, class: "gnode-token" }));
+      const tl = svgEl("text", { x: tx, y: ty + 3.5, class: "gnode-label", "text-anchor": "middle" });
+      tl.textContent = tk.length > 9 ? tk.slice(0, 8) + "…" : tk;
+      g.svg.appendChild(tl);
+    });
+
+    // central hub node
+    g.svg.appendChild(svgEl("circle", { cx, cy, r: 12, class: "gnode-token" }));
+    const hub = svgEl("text", { x: cx, y: cy + 3, class: "gnode-label", "text-anchor": "middle" });
+    hub.textContent = "brand";
+    g.svg.appendChild(hub);
+  }
+
+  function openGraph() {
+    const g = graphRefs();
+    if (!g.panel) return;
+    renderGraph();
+    g.scrim.classList.add("show");
+    g.panel.style.display = "";
+  }
+  function closeGraph() {
+    const g = graphRefs();
+    if (!g.panel) return;
+    g.scrim.classList.remove("show");
+    g.panel.style.display = "none";
+  }
+  function wireGraph() {
+    if (graph._wired) return;
+    const g = graphRefs();
+    if (!g.toggle) return;
+    graph._wired = true;
+    g.toggle.addEventListener("click", openGraph);
+    g.close.addEventListener("click", closeGraph);
+    g.scrim.addEventListener("click", closeGraph);
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeGraph(); });
+  }
+
   // -------- Event application --------
   function applyEvent(ev) {
     const page = ev.page;
@@ -410,10 +746,21 @@
 
     switch (ev.type) {
       case "agent.spawned": {
-        // Carry the master-authored prompt + granted skills onto the card (graceful if absent).
-        getOrCreateAgent(page, ev.agentId, ev.role, ev.version, { skills: ev.skills, prompt: ev.prompt });
+        // Carry the master-authored prompt + granted skills + provenance/credit onto
+        // the card (all new fields optional — graceful if absent).
+        getOrCreateAgent(page, ev.agentId, ev.role, ev.version, {
+          skills: ev.skills,
+          prompt: ev.prompt,
+          grantProvenance: ev.grantProvenance,
+          credit: ev.credit,
+        });
         st.agents += 1;
         setCounter(page, "agents", st.agents);
+        // Memory provenance: grant-provenance lessons + attributed flaws seed the graph.
+        if (page === "memory" && Array.isArray(ev.grantProvenance)) {
+          ev.grantProvenance.forEach((g) => { if (g && g.fromLesson) graphAddLesson(g.fromLesson); });
+        }
+        if (page === "memory" && ev.credit && ev.credit.flaw) graphAddLesson(ev.credit.flaw);
         break;
       }
       case "agent.status": {
@@ -432,6 +779,27 @@
       case "trace.written": {
         st.traces += 1;
         setCounter(page, "traces", st.traces);
+        // Per-agent traces column: attribute to the emitting agent (agentId).
+        if (ev.agentId) {
+          const a = getOrCreateAgent(page, ev.agentId);
+          bumpAgentStat(a, "trace", 1);
+        }
+        // The finding text feeds the memory graph (token anchoring).
+        if (page === "memory" && ev.summary) graphAddLesson(ev.summary);
+        break;
+      }
+      case "trace.resolved": {
+        // Before/after, visually evidenced (memory page). New optional event — pop a
+        // panel with the named flaw + cited rule + the two screenshots side by side.
+        if (ev.agentId) {
+          const a = getOrCreateAgent(page, ev.agentId);
+          bumpAgentStat(a, "trace", 0); // ensure stats row reveals if it has any
+        }
+        if (page === "memory") {
+          if (ev.brandRuleCited) graphAddLesson(ev.brandRuleCited);
+          if (ev.flaw) graphAddLesson(ev.flaw);
+          showResolvedPanel(ev);
+        }
         break;
       }
       case "member.upskilled": {
@@ -448,12 +816,21 @@
         // THE CLIMAX: if the rich shape is present, pop the prompt-diff focus
         // panel. No-ops (returns false) on the old thin shape -> graceful.
         showUpskillPanel(ev);
+        // The lesson that drove the upskill feeds the memory graph.
+        if (page === "memory" && typeof ev.lessonText === "string") graphAddLesson(ev.lessonText);
         break;
       }
       case "memory.distilled": {
         const accepted = Array.isArray(ev.lessonsAccepted) ? ev.lessonsAccepted.length : 0;
         st.lessons += accepted;
         setCounter(page, "lessons", st.lessons);
+        // Each distilled lesson statement anchors onto its token(s) in the graph.
+        if (page === "memory" && Array.isArray(ev.lessonsAccepted)) {
+          ev.lessonsAccepted.forEach((l) => {
+            const stmt = l && typeof l === "object" ? l.statement : l;
+            if (typeof stmt === "string") graphAddLesson(stmt);
+          });
+        }
         break;
       }
       case "design.rendered": {
@@ -461,14 +838,19 @@
         break;
       }
       case "score.updated": {
+        // H2: ev.score is now THIS gen's judged score (per-gen), NOT bestScore.
+        // -> the chart plots (gen, score); the headline tracks the best so far so
+        //    the big number never regresses mid-run (run.finished.totals.score is
+        //    authoritative at the end).
         if (typeof ev.score === "number") {
-          st.score = ev.score;
-          updateScoreUI();
+          // Headline = best per-gen score seen so far (monotonic; matches the
+          // run.finished bestScore headline).
+          if (ev.score > st.score) { st.score = ev.score; updateScoreUI(); }
         }
         break;
       }
       case "team.judged": {
-        // optional flash on the doing line; score handled by score.updated
+        // optional flash on the doing line; score handled by score.updated.
         if (typeof ev.score === "number") {
           refs.doingGlobal.textContent = "judged: " + ev.score + (ev.category ? " · " + ev.category : "");
         }
@@ -477,6 +859,18 @@
       case "memory.recalled": {
         if (Array.isArray(ev.hits) && ev.hits.length) {
           refs.doingGlobal.textContent = "↺ recalled " + ev.hits.length + " memory hit" + (ev.hits.length > 1 ? "s" : "");
+          // Per-agent recall-hits column (4.1): attribute to the recalling agent.
+          if (ev.agentId) {
+            const a = getOrCreateAgent(page, ev.agentId);
+            bumpAgentStat(a, "recall", ev.hits.length);
+          }
+          // Recalled snippets anchor onto token nodes in the memory graph.
+          if (page === "memory") {
+            ev.hits.forEach((h) => {
+              const snip = h && typeof h === "object" ? h.snippet : h;
+              if (typeof snip === "string") graphAddLesson(snip);
+            });
+          }
         }
         break;
       }
@@ -514,6 +908,7 @@
   // The orchestrator streams events into run/events.json as the build happens.
   // We poll it and apply only the NEW events, so the UI renders in real time.
   let appliedCount = 0;
+  let lastRunId = null;
   let pollTimer = null;
 
   function setStatus(text, on) {
@@ -542,8 +937,13 @@
       refs.score.textContent = "0";
     });
     updateScoreUI();
+    // Reset the memory graph (per-run, no cross-run carry).
+    graph.tokens = new Map();
+    updateGraphToggle();
+    closeGraph();
     setClock(0);
     closeUpskill();
+    closeResolved();
   }
 
   async function pollOnce() {
@@ -557,10 +957,12 @@
     }
     const list = Array.isArray(data.events) ? data.events : [];
 
-    // A new run truncated the log -> reset and re-apply from scratch.
-    if (list.length < appliedCount) {
+    // A NEW run (new runId) OR a truncated log -> reset and re-apply from scratch, so
+    // the UI always starts afresh and never shows the previous run's site/iframe.
+    if ((data.runId && data.runId !== lastRunId) || list.length < appliedCount) {
       resetAll();
       appliedCount = 0;
+      lastRunId = data.runId || lastRunId;
     }
     if (list.length > appliedCount) {
       for (let i = appliedCount; i < list.length; i++) applyEvent(list[i]);
@@ -583,17 +985,42 @@
   }
 
   // -------- Controls wiring --------
+  let speed = 4;
+  let replayTimers = [];
+  function clearReplay() { replayTimers.forEach((id) => clearTimeout(id)); replayTimers = []; }
+
+  // TIMED REPLAY of the saved events.json. Pure client-side re-render — NO re-run,
+  // NO model calls. Fixed tempo (no dead gaps); the 1x/4x/8x buttons scale it.
+  async function timedReplay() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } // pause live poll
+    clearReplay();
+    let data;
+    try { const res = await fetch("run/events.json", { cache: "no-store" }); data = await res.json(); }
+    catch { setStatus("no run to replay", false); return; }
+    const list = (Array.isArray(data.events) ? data.events : []).slice().sort((a, b) => (a.t || 0) - (b.t || 0));
+    if (!list.length) { setStatus("no run to replay", false); return; }
+    resetAll();
+    appliedCount = list.length; // a later poll won't double-apply
+    setStatus("replaying…", true);
+    const stepMs = Math.max(20, 600 / speed);
+    list.forEach((ev, i) => {
+      replayTimers.push(setTimeout(() => { applyEvent(ev); setClock(i * stepMs * speed); }, i * stepMs));
+    });
+    replayTimers.push(setTimeout(() => setStatus("finished", false), list.length * stepMs + 150));
+  }
+
   function wireControls() {
     const rb = $("#restartBtn");
-    if (rb) rb.addEventListener("click", () => { resetAll(); appliedCount = 0; pollOnce(); });
-    // Speed buttons are not used in live mode (events arrive at real pace); keep harmless.
+    if (rb) rb.addEventListener("click", timedReplay); // Restart = animated REPLAY (no re-run)
     document.querySelectorAll(".speed-btn").forEach((b) => {
       b.addEventListener("click", () => {
+        speed = Number(b.dataset.speed) || 4;
         document.querySelectorAll(".speed-btn").forEach((x) => {
           const on = x === b;
           x.classList.toggle("bg-white", on);
           x.classList.toggle("text-black", on);
         });
+        if (replayTimers.length) timedReplay(); // restart replay at the new speed
       });
     });
   }
@@ -605,13 +1032,32 @@
       state[p] = freshState();
     });
     wireControls();
+    wireGraph();
+    updateGraphToggle();
     updateScoreUI();
     startLive();
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", boot);
-  } else {
-    boot();
+  // In the browser, boot immediately. Under Node (no DOM), skip boot and expose the
+  // pure, DOM-free helpers on a test hook so app.smoke.mjs can assert the v3.1
+  // consumer logic (per-gen chart vs bestScore headline; graph token mining).
+  if (typeof document !== "undefined") {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", boot);
+    } else {
+      boot();
+    }
+  } else if (typeof globalThis !== "undefined") {
+    globalThis.__TASTELOOP_APP_TEST__ = {
+      mineTokens,
+      // score->y-pixel mapping for a 0..100 score within a 72px band (test-only;
+      // the per-gen chart UI was removed, this pure helper is kept for app.smoke).
+      yForScore: (s) => {
+        const H = 72, padT = 8, padB = 14, innerH = H - padT - padB;
+        return padT + innerH - (Math.max(0, Math.min(100, s)) / 100) * innerH;
+      },
+      // headline rule (H2): best per-gen score seen so far (monotonic max).
+      headlineFromGens: (scores) => scores.reduce((m, s) => (s > m ? s : m), 0),
+    };
   }
 })();
