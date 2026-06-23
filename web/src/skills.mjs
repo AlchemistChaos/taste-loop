@@ -134,9 +134,16 @@ function agentIdFor(agent, page, gen) {
 }
 
 function asLines(x) {
-  if (Array.isArray(x)) return x.filter(Boolean).map(String);
+  // Coerce each item to a string, extracting .flaw/.finding/.statement when it's an
+  // object (the local-model critique fallback returns [{flaw:"…"}]). Blind String()
+  // on an object yields "[object Object]" — the trace-corruption bug.
+  const one = (v) => (v && typeof v === "object")
+    ? String(v.flaw ?? v.finding ?? v.statement ?? v.text ?? "")
+    : String(v == null ? "" : v);
+  if (Array.isArray(x)) return x.map(one).map((s) => s.trim()).filter(Boolean);
   if (x == null) return [];
-  return [String(x)];
+  const s = one(x).trim();
+  return s ? [s] : [];
 }
 
 // Extract a single inline <svg>...</svg> from arbitrary model text. Returns "" if
@@ -1331,31 +1338,14 @@ async function runCritique({ agent, agentId, page, ctx, deps, emit, result }) {
 // plain-string finding (e.g. an a11y/contrast check) defaults to "med". The
 // node_set write-tag carries [role, severity] so later recall can scope on them.
 async function runTrace({ agent, agentId, page, ctx, deps, emit, result }) {
-  const { memory } = deps;
-  const sessionId = sessionIdFrom(ctx, page);
-
-  // Prefer the structured critique findings (objects) so severity is honored;
-  // fall back to result.findings / ctx.findings (strings from the check skills).
-  const structured =
-    (result && Array.isArray(result.critiqueFindings) && result.critiqueFindings) || null;
-  const raw =
-    structured ||
-    (result && result.findings) ||
-    (result && result.output && result.output.findings) ||
-    ctx?.findings ||
-    [];
-
-  for (const item of toFindingRecords(raw)) {
-    try {
-      await memory.writeTrace(sessionId, {
-        role: agent.role,
-        finding: item.finding,
-        severity: item.severity,
-        nodeSet: [agent.role, item.severity],
-      });
-      emit({ type: "trace.written", agentId, summary: item.finding });
-    } catch { /* ignore individual trace failures */ }
-  }
+  // VERIFIED-TRACING (memory fix): the orchestrator is now the SOLE tracer and writes a
+  // trace ONLY after the resolved-proof confirms the revise actually FIXED a flaw (the
+  // admission gate — store proven fixes, not raw complaints). This skill no longer writes
+  // raw, un-verified critique flaws to memory — that polluted recall with un-actionable
+  // observations that never compounded. Kept as a registered no-op so the roster + the
+  // memory-only allow-listing still resolve; the threaded-sessionId invariant is enforced.
+  void agent; void agentId; void deps; void emit; void result;
+  sessionIdFrom(ctx, page);
 }
 
 // Normalize findings (structured critique objects OR plain strings) into trace
@@ -1732,10 +1722,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       agent: { role: "critique", version: 1, instructions: "Audit then remember the findings.", tools: ["critique", "cognee_trace"] },
       gen: 0, page: "memory", ctx: traceCtx, deps, emit,
     });
-    log(events.some((e) => e.type === "trace.written"), "cognee_trace: emits trace.written");
-    log(calls.writeTrace >= 1, "cognee_trace: made real writeTrace call");
-    log(lastTraceArgs && lastTraceArgs.sessionId === sid("memory"), "cognee_trace: writes to the THREADED sessionId (not `${page}-run`)");
-    log(allTraceRecs.some((t) => t.rec.severity === "high") && allTraceRecs.every((t) => Array.isArray(t.rec.nodeSet)), "cognee_trace: severity from structured critique field (no regex) + nodeSet tag");
+    log(calls.writeTrace === 0, "cognee_trace: agent path makes NO raw writeTrace call (verified-tracing is orchestrator-side, admission-gated)");
+    log(!events.some((e) => e.type === "trace.written"), "cognee_trace: agent path emits no trace.written (orchestrator writes only resolved-verified traces)");
+    log(Array.isArray(r.findings) && r.findings.length > 0, "critique still produces findings that feed the orchestrator's verified trace step");
+    void lastTraceArgs; void allTraceRecs;
 
     // ---- 7b) image_gen: threads a data URI; builder embeds it ----
     events.length = 0;

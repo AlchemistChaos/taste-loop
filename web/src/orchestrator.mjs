@@ -143,10 +143,14 @@ function recallQuery(brand, goal) {
   return `design quality and brand adherence for ${goal} — ${tone}`.trim();
 }
 
-// node_name read filter (OR-joined): scope recall to the brand token + the critique
-// role so we pull this run's relevant prior-turn traces.
+// Recall is NOT node_name-filtered. The bridge's node_name filter requires the trace
+// TEXT to literally contain the token (e.g. "#FE2C55") — which starved recall, since
+// free-text fixes rarely contain the hex (only ~2 ever surfaced). Returning null lets
+// CHUNKS_LEXICAL rank ALL of the run's prior-turn verified fixes by relevance to the
+// query, so recall actually compounds turn-over-turn.
 function recallNodeName(brand) {
-  return [brandToken(brand), "critique"].filter(Boolean);
+  void brand;
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -504,7 +508,7 @@ function threadResult(ctx, result) {
  *                              show "memory removed = the win disappears" (C3).
  *                              Defaults to process.env.ABLATE === "1".
  */
-export async function runPage({ page, gens, memory, brand, emit, snapDir, goal = GOAL, runId, ablate }) {
+export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDirArg, goal = GOAL, runId, ablate }) {
   const isMemory = page === "memory";
   // Ablation only makes sense on the memory studio. Honor an explicit flag, else
   // fall back to the env switch (so `ABLATE=1 node run.mjs` works without wiring).
@@ -513,10 +517,12 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir, goal =
   // in run.mjs; fall back only so a bare runPage call (smoke test) still has a unique id.
   const rid = runId || `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const sessionId = `sess_${rid}_${page}`;
+  // Dedup for the VERIFIED trace write — a resolved flaw is stored at most once per run.
+  const tracedKeys = new Set();
 
   // runAgent writes snapshots to env-overridable TASTELOOP_SNAP_DIR; honor the
   // dir run.mjs handed us so the live web/run/snapshots is the one that fills.
-  if (snapDir) process.env.TASTELOOP_SNAP_DIR = snapDir;
+  if (snapDirArg) process.env.TASTELOOP_SNAP_DIR = snapDirArg;
 
   // ===================================================================
   // PRE-RUN RESET (C1, H4) — wipe this run's session store before any turn.
@@ -854,26 +860,10 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir, goal =
     //   entirely on the no-memory page and under ablation does NOT trace forward
     //   (ablate withholds memory; tracing would leak the win into the next turn).
     // ===================================================================
-    const token = brandToken(brand);
-    const traceRecords = findingObjs.map((f) => ({
-      role: creditRole(f, credit) || "critique",
-      finding: f.flaw,
-      severity: f.severity,
-      nodeSet: [token, creditRole(f, credit) || "critique", f.severity],
-    }));
-    // If an agent already traced this turn via cognee_trace, runAgent counted it
-    // (tracePeek) — the orchestrator does NOT also write, to keep the counter honest.
-    if (isMemory && !ablateMemory && !someAgentTraces && traceRecords.length) {
-      try {
-        await memory.writeTraces(sessionId, traceRecords);
-        for (const rec of traceRecords) {
-          tracesCount += 1;
-          gatedEmit({ type: "trace.written", agentId: `${page}-critique-g${gen}`, summary: rec.finding });
-        }
-      } catch {
-        /* batch write failed — traces best-effort, run continues */
-      }
-    }
+    // NOTE: we no longer write RAW critique flaws here (un-verified, often un-actionable
+    // CSS-level complaints that polluted recall). A finding becomes a trace ONLY after the
+    // resolved-proof in STEP 5 below confirms the revise actually fixed it — the admission
+    // gate (store proven fixes, not complaints). See the VERIFIED-TRACE write in STEP 5.
 
     // ===================================================================
     // SPINE STEP 5 — REVISE [BOTH] (symmetric; C3, §9.5).
@@ -939,6 +929,7 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir, goal =
             const after = (await codexCritique({ brand, screenshotPath: afterShot, goal, html: ctx.html })) || [];
             afterFlaws = new Set(after.map((c) => String((c && c.flaw) || "").trim().toLowerCase()).filter(Boolean));
           } catch { afterFlaws = new Set(); }
+          const verifiedTraces = [];
           for (const f of findingObjs) {
             const resolved = !afterFlaws.has(f.flaw.toLowerCase()); // present-before AND absent-after
             gatedEmit({
@@ -950,6 +941,34 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir, goal =
               agentId: creditAgentId(f, credit, page, gen),
               resolved,
             });
+            // ADMISSION GATE (the core memory fix): a finding becomes a trace ONLY when
+            // the revise VERIFIABLY fixed it (present-before, absent-after), and only once
+            // per run (dedup). Store it as a FORWARD, actionable rule so next turn's build
+            // pre-empts the fix BEFORE its own critique runs — that's how the memory page
+            // pulls ahead of the flat no-memory page. Not traced under ablation.
+            if (resolved && !ablateMemory) {
+              const key = f.flaw.trim().toLowerCase();
+              if (key && !tracedKeys.has(key)) {
+                tracedKeys.add(key);
+                const ruleText = `Do not reintroduce this already-fixed issue: ${f.flaw}` +
+                  (f.brandRuleCited ? ` (brand rule: ${f.brandRuleCited})` : "");
+                verifiedTraces.push({
+                  role: creditRole(f, credit) || "critique",
+                  finding: ruleText,
+                  severity: f.severity,
+                  nodeSet: [brandToken(brand), creditRole(f, credit) || "critique", f.severity],
+                });
+              }
+            }
+          }
+          if (verifiedTraces.length) {
+            try {
+              await memory.writeTraces(sessionId, verifiedTraces);
+              for (const r of verifiedTraces) {
+                tracesCount += 1;
+                gatedEmit({ type: "trace.written", agentId: `${page}-trace-g${gen}`, summary: r.finding });
+              }
+            } catch { /* verified-trace write best-effort; run continues */ }
           }
         }
       }
