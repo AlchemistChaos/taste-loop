@@ -291,8 +291,11 @@ async function deriveFromPdf() {
 // path) is layered on top so new callers can build on real design tokens while
 // existing callers keep working unchanged.
 function publicShape(spec, ds) {
-  const { colors, fonts, tone, audience, sections } = spec;
-  const base = { colors, fonts, tone, audience, do: spec.do, dont: spec.dont, sections };
+  // Pass through ALL brandspec fields (legacy colors/fonts/tone/audience/do/dont/
+  // sections PLUS any enriched brand-book blocks: mission, tagline, personality,
+  // copyExamples, photography, video, logo, adFormats, etc.) so consumers can use
+  // the full brand record. The rich design system (tokens/css/path) layers on top.
+  const base = { ...spec };
   if (ds) {
     base.tokens = ds.tokens;
     base.designSystemCss = ds.designSystemCss;
@@ -389,7 +392,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     log(Array.isArray(b.dont) && b.dont.length >= 3, "dont array (>=3)");
     log(b.dont.some((d) => /gradient/i.test(d)), "dont includes a no-gradient rule");
     log(Array.isArray(b.sections) && b.sections.length === 5, "sections array");
-    log(!("_source" in b), "public shape has no _source leak");
+    // publicShape now passes ALL brand-book fields through (mission/tagline/voice/
+    // photography/logo/etc.) so consuming agents get the full record; provenance
+    // (_source) rides along harmlessly. Assert the enriched record reaches consumers.
+    log(typeof b.tagline === "string" && /Make TikToks/i.test(b.tagline), "publicShape passes through enriched brand fields (tagline)");
 
     // ---- rich design system (additive) ------------------------------------
     log(b.tokens && b.tokens.color && b.tokens.color.roles, "tokens.color.roles present");

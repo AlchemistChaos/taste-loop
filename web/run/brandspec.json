@@ -20,13 +20,22 @@
   ],
   "audience": "creators & businesses on TikTok",
   "do": [
-    "be confident yet humble",
-    "get to the point",
-    "write the way people talk",
+    "Be confident yet humble",
+    "Be playful",
+    "Get to the point",
+    "Keep it casual",
+    "Write the way people talk",
+    "Be provocative",
     "use one brand color per composition (flat color blocks)",
     "pair brand colors with black or white for focus"
   ],
   "dont": [
+    "Brag or act cocky",
+    "Try too hard",
+    "Forget to have some fun along the way",
+    "Forget you're talking to marketers who need results",
+    "Write sloppy",
+    "Be mean or derisive",
     "Do not use gradients",
     "do not create new colors",
     "no more than one emphasis color per headline",
@@ -42,20 +51,256 @@
     "proof",
     "cta"
   ],
+  "mission": "To inspire creativity and bring joy.",
+  "missionB2B": "To inspire and empower business creators everywhere.",
+  "vision": "To create a world where any business, no matter how big or small, or what they make, sell or create, can get noticed. For most businesses, it's harder than ever for ads to get noticed—whether you're a one-person shop or a multimillion dollar corporation. But we believe that for every voice there should always be an audience. That's why we offer a sound-on, immersive first-screen experience, and a community that's always looking to discover new things, with open minds, and a willingness to get out of their comfort zone. TikTok For Business is where brands can break out and break through.",
+  "promise": "Because what you create matters, TikTok For Business is where you get discovered.",
+  "tagline": "Don't Make Ads. Make TikToks.",
+  "copyPattern": "Don't Make Ads. Make ___.",
+  "personality": {
+    "statement": "We are bold, provocative, and full of creative energy.",
+    "proofPoints": "Proof points in copy should be smart and direct, with a hint of playfulness.",
+    "partnerFraming": "We are a professional partner here to help brands get results. However, we are not business as usual. We're the creative, fun, and modern side of any brand's marketing budget."
+  },
+  "copyRules": {
+    "funnel": "Top-of-funnel = more playful/stylistic; lower-funnel = more direct but never obscure the conversion message.",
+    "funnelVerbatim": "At the top-of-funnel awareness level, we'll have more liberty to express style, playfulness, and personality. While we might have to get more direct as we move down the funnel, don't lose sight of tone. Aim to include hints of our personality—as long as it never clouds or obscures our conversion message.",
+    "jargon": "avoid business jargon; if unavoidable, soften with something colloquial/casual/funny.",
+    "jargonVerbatim": "Avoid business jargon at most costs. But if and when you have to use business terms, try to soften them with something colloquial, casual, or funny."
+  },
+  "copyExamples": {
+    "do": [
+      "Make it big on a small biz budget and maximize ROI.",
+      "Grow your audience. Grow your brand. Make graphs go up.",
+      "TikTok is the place to unleash your brand's creative side."
+    ],
+    "dont": [
+      "Hit the big time without spending a lot of dolla dolla billz, y'all.",
+      "Increase your audience and brand share of voice.",
+      "Time to ditch all the other apps. Only TikTok lets your brand be creative."
+    ]
+  },
+  "naming": {
+    "full": "TikTok For Business",
+    "capitalF": true,
+    "rule": "When a non-logo version of our brand is required, i.e., in copy form, the full name of our brand should always be represented as TikTok For Business. This is to be the case for all consumer and public-facing instances. Uppercase 'F' to be used at all times (For), as we should always treat the brand as a proper noun.",
+    "abbreviations": ["TT4B", "TTFB"],
+    "abbreviationsInternalOnly": true
+  },
+  "audienceSegments": [
+    "Small Businesses (<500)",
+    "Enterprises (>500)",
+    "Creative & Media Agencies"
+  ],
+  "audienceSegmentsDetail": {
+    "smallBusinesses": "Businesses with more limited revenue/resources and under 500 employees.",
+    "enterprises": "Businesses with more substantial revenue/resources and more than 500 employees.",
+    "agencies": "Organizations that serve small businesses and enterprises, helping them craft creative campaigns and/or purchase media."
+  },
+  "priorityVerticals": [
+    "Gaming",
+    "Retail",
+    "Food & Beverage",
+    "Lifestyle",
+    "Finance",
+    "Media & Entertainment"
+  ],
+  "audienceAge": "16-34",
+  "photography": {
+    "mood": ["real", "fun", "bold", "lighthearted", "optimistic", "action-oriented"],
+    "style": ["natural light", "colorful", "active"],
+    "composition": ["open with negative space"],
+    "content": ["diverse cast", "animals", "action", "DIY", "art", "food", "gaming", "creativity", "community"],
+    "diversity": ["race", "culture", "gender", "age", "size", "abilities", "socioeconomic", "region"],
+    "imageMasks": "Imagery is cropped in rounded rectangle frames with 25% or 50% roundness. Images can be rotated, in 10-degree increments, to create fun and dynamic compositions.",
+    "coloredBorders": "Key imagery can be highlighted with Splash, Razzmatazz, Black or White for emphasis.",
+    "guideline": "Photography, whether in selecting stock or actually shot, should always feature subject matter that is real, fun, bold, lighthearted, and optimistic. Every scenario should be action-oriented to engage the viewer, and invite them into each moment. They should never be passive or stagnant. It should never feel staged, cheesy, overly posed, or overproduced.",
+    "avoid": [
+      "busy foreground elements",
+      "static moments with inactivity",
+      "blown-out skies, hair, tree edges, etc.",
+      "harsh shadows or lighting on the subject, along with reflections and blur that complicate the photo",
+      "cluttered and complex compositions that distract from the main hero",
+      "staged/overproduced",
+      "limiting models to a single gender or race"
+    ]
+  },
+  "video": {
+    "aspectRatio": "9:16",
+    "energy": "Video content should always exude a high level of energy and fun from the get-go. Creative editing, trick cuts, interesting transitions, effects and dancing are a few examples of how to keep videos entertaining and uniquely TikTok. There's always opportunity to add a 'TikTok twist.' No two videos should feel too similar.",
+    "authenticity": "feel native, filmed like a creator not an ad",
+    "authenticityVerbatim": "Content should feel real and authentic to each featured brand or business. Footage should be filmed in a workplace setting or feature hints to the business (i.e., logos, branded accessories, product, etc.). The goal is not to make something that resembles an ad a brand would make on another platform, but to behave natively as a creator on TikTok. That authenticity is what gets brands noticed.",
+    "avoid": [
+      "Content should not be overly staged or produced, or resemble any type of content that would have been made for another platform.",
+      "Content should not be shot in a horizontal or square format.",
+      "One long, locked-off shot with no movement or effects."
+    ]
+  },
+  "illustration": {
+    "mood": ["fun", "energetic"],
+    "twist": "There's always opportunity to add a 'TikTok twist.'",
+    "colorLimits": "primary = Razzmatazz/Splash/Black/White; secondary = extended palette",
+    "dont": [
+      "gradient backgrounds",
+      "wrong shade of brand colors",
+      "multiple illustration styles",
+      "3D illustration"
+    ]
+  },
+  "adFormats": {
+    "lockup": "'Don't Make Ads.' on black bg, white type, left-aligned, top/bottom-left",
+    "lockupFont": "DIN Next LT Pro Bold Condensed",
+    "phoneHousing": "media always inside a phone graphic w/ TikTok UI",
+    "ctaColor": "opposite the phone-outline color",
+    "supers": "white text bubbles, Sofia Pro Bold, Splash+Razzmatazz on the sides",
+    "supersRules": [
+      "Supers should always be inside white text bubbles, with Splash and Razzmatazz on the right and left sides of the bubble.",
+      "Supers should always be in Sofia Pro Bold.",
+      "Supers should be dynamic and move around the frame to see the content more clearly.",
+      "Glitch animation should be used to bring text bubbles on and off screen.",
+      "Supers should only appear over picture or a black background."
+    ],
+    "video": {
+      "intro": [
+        "'Don't Make Ads.' should always be on a black background with white type.",
+        "'Don't Make Ads.' should always animate in word-by-word for emphasis.",
+        "The full-glitch animation should be used to transition from the intro to the footage."
+      ],
+      "middle": "TikToks should be featured inside a phone graphic always. This can be cropped or moved around to fit with different sizing.",
+      "outro": [
+        "Glitch animation should be used to transition from footage to the end card.",
+        "End card colors should correspond with the main color used in the fill around the phone."
+      ]
+    },
+    "stills": "Video is the preferred medium, as TikTok is a video-based platform. Stills can be taken from the video content for specific ad buys if needed. When taking a still from footage, make sure it is a clear frame without motion blur. 'Don't Make Ads.' should always be on a black background with white type in the top or bottom left of the frame. 'Make TikToks.' positioning should be partially on both the black background and image as to not block any important part of the content.",
+    "banners": [
+      "Regardless of banner sizing, at least one corner of the phone graphic should always be shown (excluding extreme horizontal sizing).",
+      "Logo should always align with DMA.",
+      "CTA button should either pair with or be aligned with the logo.",
+      "CTA button color should be opposite whatever color is used in the phone outline graphic."
+    ],
+    "dont": [
+      "Do not have text bubbles on top of or overlapping a colored background.",
+      "Do not right or center align 'Don't Make Ads.'",
+      "Do not place imagery in a layout that's not housed in the phone shape."
+    ],
+    "sizes": {
+      "socialStoriesVideo": "9:16",
+      "youtubePreroll": "16:9",
+      "socialStill_4x5": "4:5",
+      "socialStill_1x1": "1:1",
+      "staticBanner": "350x200"
+    }
+  },
+  "logo": {
+    "lockups": {
+      "horizontal": "The horizontal lockup option is our primary and preferred option for most applications.",
+      "vertical": "The vertical lockup option is our secondary option and best used in tight or vertically oriented applications such as portrait oriented business cards, social icons, 9x16 vertical video, etc."
+    },
+    "iconRule": "For extra small applications where the TikTok For Business logotype is illegible, the two circles can be leveraged as an icon. The two circles can be used as an icon only if TikTok For Business also appears on the page, such as a social media icon with the profile handle next to the icon.",
+    "colorVariations": "The logo exists in four color variations to enhance legibility on different backgrounds: Full Color Black, Full Color White, Monochrome Black, Monochrome White. Full-color logo should only be used on black or white backgrounds. Logo should be white on dark backgrounds and black on light backgrounds.",
+    "onColor": "Black and white logos can be used on Razzmatazz background. Do not use white logo on Splash background.",
+    "minSizePx": {
+      "horizontal": "5px tall (.07in, .2mm)",
+      "vertical": "14px tall (.2in, 5mm)"
+    },
+    "clearspace": "Clearspace around the logo is equal to the cap height of the 'T' for both horizontal and vertical logo lockups.",
+    "rotation": "The logo may be rotated to add a level of playfulness. When rotating the logo, it must be done in 10-degree increments and never end up upside down. When rotating the logo vertically (90°), it should be placed with 'TikTok' at the bottom to visually ground the logo.",
+    "placement": {
+      "horizontal": "Top left, bottom left, top center, center, bottom center, top right, bottom right.",
+      "vertical": "Top left, bottom left, center, top right, bottom right.",
+      "exceptions": "When approved logo placements cannot be met, follow clearspace and minimum scale guidelines for maximum accessibility."
+    },
+    "coBranding": "Aligning partnership logos should follow clearspace rules. The separating line between logos can be created using the vertical line glyph in the Sofia Pro Bold typeface at the same font size as the logotype.",
+    "dont": [
+      "Don't re-create the logo by typing it with a font.",
+      "Don't stretch, distort, or manipulate the logo.",
+      "Don't add effects like drop shadows or gradients.",
+      "Do not change the logo color.",
+      "Don't place the logo on a background that reduces its legibility.",
+      "Do not outline or create a keyline around the logo."
+    ]
+  },
+  "motion": {
+    "feel": "efficient, smooth, fun",
+    "props": ["motion blur", "rotation", "scale"],
+    "allowedTransitions": ["glitch", "squash & stretch"],
+    "forbid": ["drop shadows", "gradients", "distorting end states"],
+    "verbatim": "Movement should feel efficient, smooth, and fun. Use motion blur, rotation, and scale animation properties to add fluidity. Do not add effects like drop shadows & gradients. Do not distort or manipulate the logo on end states. Glitch effects and squash and stretch are acceptable during transition states."
+  },
+  "emphasisRule": "Emphasize keywords with Razzmatazz + Sofia Pro Soft; include the trailing punctuation in the emphasis; Black is also a legal text-emphasis color; never Splash for text.",
+  "emphasisDetail": {
+    "color": "#FE2C55",
+    "typeface": "Sofia Pro Soft",
+    "verbatim": "Add emphasis to keywords or phrases by highlighting with Razzmatazz (#FE2C55) and Sofia Pro Soft. Make sure to highlight punctuation following highlighted keyword or phrase.",
+    "rules": [
+      "Do not use Splash (#25F4EE) to highlight text, as it does not meet accessibility standards.",
+      "Do not use color blocking to highlight text. Only highlight text by changing font color.",
+      "Limit color usage to only two colors. (i.e., Black and Razzmatazz or White and Razzmatazz.)"
+    ]
+  },
+  "globalPortfolio": {
+    "insight": "In an age of informational overload, every business is desperate to be noticed.",
+    "promise": "The TikTok For Business portfolio can get your business discovered in a way normal ads can't.",
+    "creativeAdaptation": "Every platform gets brands discovered differently, always better than the norm.",
+    "patternExamples": [
+      "Don't Make Ads. Make TikToks.",
+      "Don't make ads. Make news on News Republic.",
+      "Don't make ads. Make a new trend on BuzzVideo.",
+      "Don't make ads. Make someone's day on TopBuzz.",
+      "Don't make ads. Make a connection on Helo.",
+      "Don't make ads. Make people smile on Ulike.",
+      "Don't make ads. Make an impact at scale on Pangle."
+    ]
+  },
+  "platformManifesto": "Don't Make Ads. Make TikToks. If you want your business to be invisible, make an ad. Put it on Facebook or Instagram, or if you're feeling really nostalgic, TV. We block them, skip them, and invented the DVR just so we could fast-forward through. If you want your brand to get noticed... head to TikTok. It's a whole different ballgame over here, and we want you to come play with us. Come get discovered in a way you never thought you could. Just promise us one thing… Don't Make Ads. Make TikToks.",
   "_source": {
     "pdf": "/Users/chaosalchemist/Desktop/TikTok_guidelines.pdf",
-    "method": "pdftotext -layout (real text) + pdftoppm render + vision/pixel verify",
+    "method": "pdftotext -layout (real text) + pdftoppm render + vision/pixel verify + verbatim brand-book authoring from full guideline text (tiktok_text.txt)",
     "pages": {
-      "palette": 35,
-      "things_to_avoid_color": 37,
+      "platform_overview": 3,
       "personality": 5,
       "tone": 6,
-      "typography": 27
+      "tone_language_examples": 7,
+      "brand_treatment_naming": 8,
+      "logo_color_variations": 15,
+      "logo_scale": 16,
+      "logo_clearspace": 17,
+      "logo_placement": 20,
+      "logo_rotation": 21,
+      "logo_animation_motion": 22,
+      "logo_things_to_avoid": 25,
+      "typography": 27,
+      "headline_emphasis": 31,
+      "localization": 32,
+      "palette": 35,
+      "color_rules": 36,
+      "things_to_avoid_color": 37,
+      "photography_guidelines": 48,
+      "diversity": 49,
+      "photography_application": 50,
+      "photography_things_to_avoid": 51,
+      "video_rules": 52,
+      "video_rules_music_sfx": 53,
+      "video_dos_donts": 54,
+      "ad_videos": 56,
+      "ad_stills": 57,
+      "ad_graphics": 58,
+      "ad_banners": 59,
+      "ad_dos_donts": 60,
+      "vision": 64,
+      "promise": 65,
+      "audiences_verticals": 66,
+      "platform_manifesto": 67,
+      "copy_pattern": 68,
+      "portfolio_pattern_examples": 69,
+      "illustration": 70
     },
     "hexFound": [
       "#FE2C55",
       "#25F4EE",
-      "#000000"
+      "#000000",
+      "#FFFFFF"
     ],
     "derivedAt": "2026-06-21T22:22:41.749Z"
   }
