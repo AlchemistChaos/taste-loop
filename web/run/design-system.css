@@ -560,10 +560,9 @@ body.ds-body {
 }
 .ds-figure-25 { border-radius: 25%; }
 .ds-figure-50 { border-radius: 50%; }                 /* editorial circle crop */
-.ds-figure-bordered { box-shadow: inset 0 0 0 6px var(--color-secondary); } /* inset stroke != drop shadow */
+.ds-figure-bordered { box-shadow: inset 0 0 0 4px var(--color-secondary); } /* inset stroke != drop shadow; 4px = toolkit standard (book p.50) */
 
 /* Rotation — images rotate in 10deg increments ONLY (doc rule). */
-.ds-rotate-6  { transform: rotate(6deg); }            /* hero-figure tilt */
 .ds-rotate-10 { transform: rotate(10deg); }
 .ds-rotate-n10 { transform: rotate(-10deg); }
 
@@ -613,5 +612,118 @@ body.ds-body {
 .ds-btn-ghost:hover { background: currentColor; }
 .ds-emph-invert {                                     /* emphasis on a Razzmatazz field */
   color: var(--color-white);
+  font-family: var(--font-emphasis);
+}
+
+/* ###########################################################################
+   ###########################################################################
+   DESIGN TOOLKIT — brand-book "toolkit" devices (book pp.36, 40-46, 50)
+   Additive section. These are the small, repeatable brand marks the builder
+   composes onto a page: logo-derived emphasis glyphs that bracket a headline,
+   the logo-circle dot pattern (texture only), the stadium word-bubble that
+   HOLDS copy, mixed-radius rectangles, the 4-color image frames, and Black as
+   a legal text-emphasis color. All flat, no gradients, no drop shadows.
+   ###########################################################################
+   ########################################################################### */
+
+/* ---------------------------------------------------------------------------
+   T.1  Emphasis Marks (book p.45-46)
+   Logo-derived glyphs that BRACKET an H1 — two per headline, in DIFFERENT
+   colors, sized to the headline's x-height (em-sized so they track the type).
+   The square (bracket) mark is reserved for sentence-end. Decorative: mark
+   spans should be aria-hidden. The glyph is painted from a tiny inline SVG
+   used as a MASK over `currentColor`, so the color utilities below tint it.
+   --------------------------------------------------------------------------- */
+.ds-mark {
+  display: inline-block;
+  width: .62em;
+  height: .62em;
+  vertical-align: baseline;
+  background: currentColor;
+  -webkit-mask: center / contain no-repeat;
+  mask: center / contain no-repeat;
+}
+/* Cross / plus (+) — a thick filled plus, opaque so the mask shows fully. */
+.ds-mark-cross {
+  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M40 6h20v34h34v20H60v34H40V60H6V40h34z'/></svg>");
+  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M40 6h20v34h34v20H60v34H40V60H6V40h34z'/></svg>");
+}
+/* Chevron (>) — a filled right-pointing chevron. */
+.ds-mark-chevron {
+  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M30 8L22 22l28 28-28 28 8 14 42-42z'/></svg>");
+  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M30 8L22 22l28 28-28 28 8 14 42-42z'/></svg>");
+}
+/* Corner bracket — sentence-end square corner. */
+.ds-mark-bracket {
+  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M16 16h68v20H36v48H16z'/></svg>");
+  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path fill='black' d='M16 16h68v20H36v48H16z'/></svg>");
+}
+/* Mark color utilities — two marks per headline must differ in color. */
+.ds-mark-splash { color: var(--color-secondary); }
+.ds-mark-razz   { color: var(--color-primary); }
+.ds-mark-ink    { color: var(--color-fg-ink); }
+.ds-mark-white  { color: var(--color-white); }
+
+/* ---------------------------------------------------------------------------
+   T.2  Pattern (book p.43-44)
+   Logo-circle dot tiling. TEXTURE ONLY — never sits under text. Min dot
+   diameter 20px (default tile), large dots ~50px. `color` sets the dot color.
+   Kept subtle (modest opacity) so it reads as texture, not a foreground block.
+   --------------------------------------------------------------------------- */
+.ds-pattern {
+  background-image: radial-gradient(currentColor 0 10px, transparent 10px); /* 20px dots */
+  background-size: 40px 40px;
+  opacity: .18;
+}
+.ds-pattern-lg {
+  background-image: radial-gradient(currentColor 0 25px, transparent 25px); /* 50px dots */
+  background-size: 80px 80px;
+}
+.ds-pattern-splash { color: var(--color-secondary); }
+.ds-pattern-razz   { color: var(--color-primary); }
+.ds-pattern-ink    { color: var(--color-fg-ink); }
+
+/* ---------------------------------------------------------------------------
+   T.3  Word-bubble (book p.40)
+   A stadium pill that HOLDS words / CTAs (distinct from the decorative
+   .ds-bubble-cluster signature device). White field, black text by default.
+   --------------------------------------------------------------------------- */
+.ds-bubble-text {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;                              /* book: bubble/pill min 30px */
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-heading);
+  font-weight: var(--font-weight-bold);
+  background: var(--color-white);
+  color: var(--color-fg-ink);
+}
+.ds-bubble-text-splash { background: var(--color-secondary); color: var(--color-fg-ink); }
+.ds-bubble-text-razz   { background: var(--color-primary);   color: var(--color-white); }
+.ds-bubble-text-stroke { background: transparent; box-shadow: inset 0 0 0 2px currentColor; }
+
+/* ---------------------------------------------------------------------------
+   T.4  Mixed-radius (book p.41 — up to 2 curve proportions per element)
+   --------------------------------------------------------------------------- */
+.ds-rrect-mixed {
+  border-radius: var(--radius-pill) var(--radius-lg) var(--radius-pill) var(--radius-lg);
+}
+
+/* ---------------------------------------------------------------------------
+   T.5  4-color image-frame borders (book p.50)
+   The existing .ds-figure-bordered (Splash) plus the other three brand colors.
+   ONE consistent 4px inset stroke across all four (a stroke, not a drop shadow).
+   --------------------------------------------------------------------------- */
+.ds-figure-bordered       { box-shadow: inset 0 0 0 4px var(--color-secondary); } /* Splash */
+.ds-figure-bordered-razz  { box-shadow: inset 0 0 0 4px var(--color-primary); }
+.ds-figure-bordered-ink   { box-shadow: inset 0 0 0 4px var(--color-black); }
+.ds-figure-bordered-white { box-shadow: inset 0 0 0 4px var(--color-white); }
+
+/* ---------------------------------------------------------------------------
+   T.6  Black emphasis (book p.36 — Black is also a legal text-emphasis color)
+   --------------------------------------------------------------------------- */
+.ds-emph-ink {
+  color: var(--color-fg-ink);
   font-family: var(--font-emphasis);
 }

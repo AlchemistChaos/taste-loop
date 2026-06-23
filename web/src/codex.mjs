@@ -584,6 +584,31 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
     ? fixRules.map((r, i) => `${i + 1}. ${r}`).join("\n")
     : "";
 
+  // BRAND VOICE & COPY — feed the enriched brandspec voice so headlines/body are
+  // written in the REAL TikTok For Business voice (anti-ad, creative, direct) instead
+  // of generic hype. The few-shot copyExamples are the strongest signal; tagline /
+  // personality / funnel-tone / emphasis rule shape the rest. All optional (back-compat
+  // with a thin brandspec — empty string when the fields are absent).
+  const voiceLines = [];
+  if (brand.personality) voiceLines.push(`Personality: ${brand.personality}`);
+  if (brand.tagline) voiceLines.push(`Brand ethos: "${brand.tagline}"${brand.copyPattern ? ` (copy engine: "${brand.copyPattern}")` : ""} — write like a creator, NOT a traditional ad.`);
+  if (brand.copyRules && brand.copyRules.funnel) voiceLines.push(`Funnel tone: ${brand.copyRules.funnel}`);
+  if (brand.copyRules && brand.copyRules.jargon) voiceLines.push(brand.copyRules.jargon);
+  if (brand.emphasisRule) voiceLines.push(`Emphasis rule: ${brand.emphasisRule}`);
+  const _ex = brand.copyExamples || {};
+  const _exDo = Array.isArray(_ex.do) ? _ex.do.slice(0, 3) : [];
+  const _exDont = Array.isArray(_ex.dont) ? _ex.dont.slice(0, 3) : [];
+  if (_exDo.length || _exDont.length) {
+    voiceLines.push(
+      "COPY EXAMPLES — match the voice of the GOOD lines, never the BAD ones:" +
+      _exDo.map((s) => `\n  GOOD: ${s}`).join("") +
+      _exDont.map((s) => `\n  BAD:  ${s}`).join("")
+    );
+  }
+  const brandVoice = voiceLines.length
+    ? `\nBRAND VOICE & COPY (write ALL headlines + body copy in THIS voice):\n${voiceLines.join("\n")}\n`
+    : "";
+
   // Shared design-system contract text used by BOTH the fresh build and the
   // revise prompt so a corrected page stays on the system (DS classes/tokens,
   // no CDN, no gradients).
@@ -595,9 +620,11 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
     `.ds-container, .ds-stack; .ds-h1, .ds-h2, .ds-subhead, .ds-lead, .ds-body-text, .ds-caption, ` +
     `.ds-emph for ONE highlighted keyword; .ds-bg, .ds-bg-light, .ds-bg-primary, .ds-bg-secondary, ` +
     `.ds-surface, .ds-btn + .ds-btn-primary/.ds-btn-secondary/.ds-btn-outline/.ds-btn-on-primary/.ds-btn-ghost; ` +
-    `.ds-actions, .ds-link, .ds-figure (+ .ds-figure-25/.ds-figure-50/.ds-figure-bordered/.ds-rotate-6/.ds-rotate-10)), ` +
+    `.ds-actions, .ds-link, .ds-figure (+ .ds-figure-25/.ds-figure-50/.ds-figure-bordered[-razz/-ink/-white]/.ds-rotate-10)), ` +
     `and COMPOSED brand components: .ds-hero, .ds-feature-grid, .ds-stat-band, .ds-steps, .ds-cta-band, ` +
-    `.ds-bubble-cluster, .ds-chip, .ds-grid-2, .ds-grid-3.\n` +
+    `.ds-bubble-cluster, .ds-chip, .ds-grid-2, .ds-grid-3; and the BRAND TOOLKIT: emphasis marks ` +
+    `.ds-mark(-cross/-chevron/-bracket)(-splash/-razz/-ink/-white), .ds-pattern(-splash/-razz/-ink) dot patterns, ` +
+    `.ds-bubble-text(-splash/-razz/-stroke) word-holding pills, .ds-emph-ink (black keyword emphasis), .ds-rrect-mixed.\n` +
     `BUILD USING THESE: put class="ds-body" on <body>; use the .ds-* classes and the ` +
     `var(--color-*)/var(--font-*)/var(--space-*) tokens for ALL styling. Do NOT hardcode hex colors ` +
     `or font stacks that the system already provides — reference the variables/classes. ` +
@@ -657,6 +684,7 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
       `GOAL: ${goal}\n` +
       `BRAND: tone ${tone}; audience ${brand.audience || "general"}.\n` +
       `BRAND DON'Ts (must obey): ${JSON.stringify(donts)}.\n` +
+      brandVoice +
       rule +
       `\nFIX-RULES — apply ALL of them, non-negotiable:\n${rulesBlock}\n` +
       `\nRevision requirements:\n` +
@@ -692,6 +720,7 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
       `GOAL: ${goal}\n` +
       `BRAND: tone ${tone}; audience ${brand.audience || "general"}.\n` +
       `BRAND DON'Ts (must obey): ${JSON.stringify(donts)}.\n` +
+      brandVoice +
       rule +
       rulesDirective +
       (copyHint ? `Copy direction: ${copyHint}\n` : "") +
@@ -703,8 +732,10 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
       `\nART DIRECTION (non-negotiable): the page is BOLD, flat, editorial. Alternate FULL-BLEED color-blocked ` +
       `panels — Razzmatazz, black, and white in sequence (exactly ONE brand color per panel; Splash only as a ` +
       `full-bleed accent band or figure border, NEVER on text). The hero headline is OVERSIZED and breaks the ` +
-      `grid, with exactly ONE word wrapped in .ds-emph (Razzmatazz). Use .ds-bubble-cluster overlapping ` +
-      `circles as a recurring accent. Every image is a real .ds-figure media frame (rounded 25%/50%, optional ` +
+      `grid, with exactly ONE word wrapped in .ds-emph (Razzmatazz). BRACKET the hero H1 with TWO emphasis marks ` +
+      `(.ds-mark) in DIFFERENT brand colors — e.g. a .ds-mark.ds-mark-cross.ds-mark-splash span before it and a ` +
+      `.ds-mark.ds-mark-chevron.ds-mark-razz span after (square bracket ONLY at a sentence end). Use .ds-bubble-cluster ` +
+      `overlapping circles AND at least one .ds-pattern dot band (never under text) as recurring accents. Every image is a real .ds-figure media frame (rounded 25%/50%, optional ` +
       `10° rotation) — NEVER a bare rectangle or grey placeholder. Generous 96px/128px section padding. NO ` +
       `gradients, NO drop shadows; create depth with layered flat shapes only.\n` +
       `\nBuild a single self-contained responsive HTML5 page with EXACTLY ${sectionCount} sections ` +
