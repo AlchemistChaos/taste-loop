@@ -628,7 +628,10 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
     `BUILD USING THESE: put class="ds-body" on <body>; use the .ds-* classes and the ` +
     `var(--color-*)/var(--font-*)/var(--space-*) tokens for ALL styling. Do NOT hardcode hex colors ` +
     `or font stacks that the system already provides — reference the variables/classes. ` +
-    `Do NOT add Tailwind, Bootstrap, or any external CSS/CDN — the inlined design system is the ONLY stylesheet.\n` +
+    `Do NOT add Tailwind, Bootstrap, or any external CSS/CDN — the inlined design system is the ONLY stylesheet. ` +
+    `Do NOT add your OWN <style> block, do NOT use inline style="" attributes, and do NOT invent new .ds-* class ` +
+    `names (e.g. NO .ds-cta-frame, NO custom borders/frames) — compose ONLY from the .ds-* classes + var(--*) tokens ` +
+    `listed here. For the closing CTA use .ds-cta-band > .ds-container > .ds-cta-inner exactly (no wrapping "frame").\n` +
     // §3b — COMPOSE the page from the NAMED components (no inline-style atoms, no
     // layout invented from scratch); both the fresh build AND the revise share this.
     `COMPOSE THE PAGE FROM THESE NAMED COMPONENTS (do NOT inline-style raw atoms, do NOT invent layout from ` +
