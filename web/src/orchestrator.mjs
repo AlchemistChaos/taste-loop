@@ -911,17 +911,22 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
       // Turn 2+ (surgicalTurn): apply ONLY the audited gap fix (the upgrade) — one small,
       // targeted change, keep the rest of the page intact. Turns 0-1: whole-page refine
       // (this turn's flaws + recalled prior-turn traces + the constructive upgrade).
+      // Recalled prior-turn traces, CAPPED to the top few so they don't drown the prompt (audit:
+      // 47 raw "do not reintroduce" rules = a wall the model can't weight). This is the carrier
+      // that makes MEMORY actually reach the build — it must be present on surgical turns too.
+      const cappedRecall = (isMemory && !ablateMemory) ? recalledRules.slice(0, 8) : [];
       let reviseRules;
       if (surgicalTurn) {
-        reviseRules = upgrade ? [`Make ONLY this one targeted fix (close this design-system gap): ${upgrade}`] : [];
+        // Turn 2+ : LEAD with the ONE targeted gap fix, but ALSO carry this turn's flaws + the
+        // (capped) recalled traces so the surgical edit doesn't FREEZE known defects in place
+        // (the audit's #1 + #3 root causes). The surgical prompt keeps UNRELATED sections stable.
+        reviseRules = upgrade ? [`PRIMARY targeted fix (close this gap): ${upgrade}`] : [];
+        reviseRules = mergeRules(reviseRules, flawTexts);
+        reviseRules = mergeRules(reviseRules, cappedRecall);
       } else {
+        // Turns 0-1 : whole-page refine — this turn's flaws + recalled traces + the upgrade.
         reviseRules = mergeRules([], flawTexts);
-        // Memory (non-ablate) ALSO incorporates recalled prior-turn traces.
-        if (isMemory && !ablateMemory && recalledRules.length) {
-          reviseRules = mergeRules(reviseRules, recalledRules);
-        }
-        // CONSTRUCTIVE: also PURSUE this turn's highest-leverage upgrade (excellence, not just
-        // flaw-removal). Symmetric — both pages get their OWN critique's upgrade.
+        reviseRules = mergeRules(reviseRules, cappedRecall);
         if (upgrade) {
           reviseRules = mergeRules(reviseRules, [`Beyond fixing the flaws, PURSUE this upgrade to make the page exceptional: ${upgrade}`]);
         }

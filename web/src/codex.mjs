@@ -590,7 +590,14 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
   // personality / funnel-tone / emphasis rule shape the rest. All optional (back-compat
   // with a thin brandspec — empty string when the fields are absent).
   const voiceLines = [];
-  if (brand.personality) voiceLines.push(`Personality: ${brand.personality}`);
+  if (brand.personality) {
+    // personality may be an object {statement, proofPoints, ...} — coerce to its statement,
+    // NOT "[object Object]" (the bug the audit found, codex.mjs ~593).
+    const p = (brand.personality && typeof brand.personality === "object")
+      ? (brand.personality.statement || Object.values(brand.personality).filter((v) => typeof v === "string").join("; "))
+      : String(brand.personality);
+    if (p && p.trim()) voiceLines.push(`Personality: ${p.trim()}`);
+  }
   if (brand.tagline) voiceLines.push(`Brand ethos: "${brand.tagline}"${brand.copyPattern ? ` (copy engine: "${brand.copyPattern}")` : ""} — write like a creator, NOT a traditional ad.`);
   if (brand.copyRules && brand.copyRules.funnel) voiceLines.push(`Funnel tone: ${brand.copyRules.funnel}`);
   if (brand.copyRules && brand.copyRules.jargon) voiceLines.push(brand.copyRules.jargon);
@@ -713,9 +720,11 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
       `\nFIX-RULES — apply ALL of them, non-negotiable:\n${rulesBlock}\n` +
       `\nRevision requirements:\n` +
       (surgical
-        ? `- SURGICAL EDIT: apply ONLY the rule(s) above, to the SINGLE section/area they name. Every OTHER ` +
-          `section of the page MUST stay BYTE-FOR-BYTE identical — do NOT rewrite copy, layout, colors, or any ` +
-          `section the rules don't mention. Change the one thing; leave everything else exactly as it is.\n`
+        ? `- TARGETED EDIT: APPLY the rules above — make the primary fix AND remove EVERY flaw the rules name, in ` +
+          `whatever section it lives (a recurring defect like a stray mark or a dead hero void MUST actually ` +
+          `disappear, not be preserved). Keep the page's overall structure and any section the rules DON'T mention ` +
+          `stable — do NOT rebuild from scratch, re-order sections, or churn good copy — but you ARE free to edit ` +
+          `the specific elements the rules flag, even across sections.\n`
         : hasRules
         ? `- Apply every numbered rule above to THIS page (e.g. add a color where a rule ` +
           `says it is missing, remove a pattern a rule forbids, sharpen tone/copy where a rule demands it).\n`
@@ -761,10 +770,10 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
       `\nART DIRECTION (non-negotiable): the page is BOLD, flat, editorial. Alternate FULL-BLEED color-blocked ` +
       `panels — Razzmatazz, black, and white in sequence (exactly ONE brand color per panel; Splash only as a ` +
       `full-bleed accent band or figure border, NEVER on text). The hero headline is OVERSIZED and breaks the ` +
-      `grid, with exactly ONE word wrapped in .ds-emph (Razzmatazz). BRACKET the hero H1 with TWO emphasis marks ` +
-      `(.ds-mark) in DIFFERENT brand colors — e.g. a .ds-mark.ds-mark-cross.ds-mark-splash span before it and a ` +
-      `.ds-mark.ds-mark-chevron.ds-mark-razz span after (square bracket ONLY at a sentence end). Use at least one ` +
-      `.ds-pattern dot band (never under text) as a recurring accent. NOTE: .ds-bubble-cluster is DECORATIVE overlapping ` +
+      `grid, with exactly ONE word wrapped in .ds-emph (Razzmatazz). Emphasis marks (.ds-mark) and dot patterns ` +
+      `(.ds-pattern) are OPTIONAL accents — use them ONLY if they sit tight and intentional against the lockup; a mark ` +
+      `that floats free, detaches, or clips is WORSE than none, so OMIT it rather than leave a stray glyph. Do NOT ` +
+      `force marks or patterns onto every build. NOTE: .ds-bubble-cluster is DECORATIVE overlapping ` +
       `CIRCLES ONLY (it must contain .ds-bubble-primary/-secondary/-ink circles, NEVER word-bubbles or text) and is NOT ` +
       `for the hero; .ds-bubble-text pills are the standalone word/CTA holders. Every image is a real .ds-figure media frame (rounded 25%/50%, optional ` +
       `10° rotation) — NEVER a bare rectangle or grey placeholder. Generous 96px/128px section padding. NO ` +
@@ -1108,13 +1117,14 @@ export async function codexJudge({ brand, html, goal, imagePath }) {
 export function designInventory(brand) {
   const tokens = summarizeTokens(brand);
   const components =
-    "COMPONENTS + BRAND TOOLKIT the page should USE (flag any that are missing/underused): " +
-    ".ds-hero/.ds-hero--type, .ds-display (mega headline), .ds-statement (full-bleed type moment), " +
-    ".ds-quote + .ds-quote-attr (pull-quote), .ds-bignum (oversized stat number), .ds-grid-asym " +
-    "(asymmetric split), .ds-feature-grid, .ds-stat-band, .ds-steps, .ds-cta-band, " +
-    ".ds-card/.ds-surface/.ds-feature, .ds-chip (eyebrow pills); .ds-mark (emphasis marks — bracket a " +
-    "headline with TWO different-color marks), .ds-pattern (dot bands), .ds-bubble-cluster/.ds-bubble-text, " +
-    ".ds-emph/.ds-emph-ink (one-keyword emphasis), .ds-text-outline.";
+    "LAYOUT + TYPE COMPONENTS the page should use WELL (flag a structural gap — a section that's flat, cramped, " +
+    "or not using the right one): .ds-hero/.ds-hero--type, .ds-display (mega headline), .ds-statement (full-bleed " +
+    "type moment), .ds-quote + .ds-quote-attr (pull-quote), .ds-bignum (oversized stat number), .ds-grid-asym " +
+    "(asymmetric split), .ds-feature-grid, .ds-stat-band, .ds-steps, .ds-cta-band, .ds-card/.ds-surface/.ds-feature, " +
+    ".ds-chip (eyebrow pills), .ds-emph (ONE-keyword Razzmatazz emphasis).\n" +
+    "DO NOT flag decorative marks/patterns/bubbles (.ds-mark/.ds-pattern/.ds-bubble) as gaps — they are optional " +
+    "and already over-used. PRIORITIZE fixing real craft problems (dead voids, cramped/awkward sections, weak " +
+    "hierarchy, poor contrast, washed-out text) over adding any component.";
   return tokens + "\n" + components;
 }
 
@@ -1155,7 +1165,7 @@ export async function codexCritique({ brand, screenshotPath, goal, html, invento
     ? `DESIGN SYSTEM INVENTORY (audit the page for GAPS — tokens/components below that are MISSING or UNDERUSED on the rendered page):\n${inv}\n\n`
     : "";
   const upgradeField = inv
-    ? ` "upgrade": "<the SINGLE highest-value GAP to close NOW: name the exact SECTION/area + the ONE token or .ds-* component from the inventory that is missing or underused there + the small, surgical change to add it. ONE area only — a targeted fix, NOT a redesign.>",\n`
+    ? ` "upgrade": "<the SINGLE highest-value improvement NOW: PREFER fixing a recurring CRAFT problem (a dead void, a cramped/awkward section, weak hierarchy, washed-out or low-contrast text) in a specific SECTION; only if there is a genuine STRUCTURAL gap should you name a .ds layout/type component to use. ONE area, surgical. Do NOT suggest adding decorative marks/patterns/bubbles.>",\n`
     : ` "upgrade": "<the SINGLE highest-leverage CONSTRUCTIVE move that would take this page from good to EXCEPTIONAL — a bold, SPECIFIC art-direction or copy upgrade that embodies the brand at its BEST (lean into a brand strength; name the .ds component or section to change). This is NOT a flaw fix — it is what would make the page a 90+ instead of a competent 75.>",\n`;
   const upgradeRule = inv
     ? `- upgrade: pick the ONE biggest gap vs the inventory (a token/component the page should use but doesn't, in a specific section). Keep it SMALL + surgical — one area. NO photos/images/video. NEVER empty.\n`
