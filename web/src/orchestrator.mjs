@@ -802,15 +802,19 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
       beforeShot = ""; // render miss — codexCritique will render its own from html
     }
     let critique = [];
+    let upgrade = ""; // the constructive critique: the single highest-leverage "make it great" move
     try {
       // Pass html too so codexCritique can render its OWN PNG if our pre-render missed.
-      critique = (await codexCritique({ brand, screenshotPath: beforeShot, goal, html: ctx.html })) || [];
+      const cr = await codexCritique({ brand, screenshotPath: beforeShot, goal, html: ctx.html });
+      critique = (cr && cr.findings) || [];
+      upgrade = (cr && typeof cr.upgrade === "string") ? cr.upgrade.trim() : "";
     } catch (err) {
       // Critique throws on Codex failure (no silent fallback), but a miss must not
       // kill the run — fall back to whatever the team's own auditor surfaced.
       gatedEmit({ type: "agent.status", agentId: `${page}-critique-g${gen}`, doing: `critique failed (kept page): ${err?.message || err}` });
       critique = (ctx.findings || []).map((f) => ({ flaw: String(f), brandRuleCited: "", severity: "med" }));
     }
+    if (upgrade) gatedEmit({ type: "critique.made", findings: [`UPGRADE: ${upgrade}`] });
     // Normalize + de-dupe the structured findings (the only severity source).
     const seenF = new Set();
     const findingObjs = [];
@@ -880,6 +884,12 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
       if (isMemory && !ablateMemory && recalledRules.length) {
         reviseRules = mergeRules(reviseRules, recalledRules);
       }
+      // CONSTRUCTIVE: also PURSUE this turn's highest-leverage upgrade (excellence, not just
+      // flaw-removal). Symmetric — both pages get their OWN critique's upgrade; the recalled
+      // PRIOR winning directions above are the memory-only differentiator.
+      if (upgrade) {
+        reviseRules = mergeRules(reviseRules, [`Beyond fixing the flaws, PURSUE this upgrade to make the page exceptional: ${upgrade}`]);
+      }
       if (reviseRules.length && ctx.html) {
         gatedEmit({
           type: "agent.status",
@@ -926,8 +936,9 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
           try { afterShot = await renderShot(ctx.html, preShotPath(page, gen, "after")); } catch { afterShot = ""; }
           let afterFlaws = new Set();
           try {
-            const after = (await codexCritique({ brand, screenshotPath: afterShot, goal, html: ctx.html })) || [];
-            afterFlaws = new Set(after.map((c) => String((c && c.flaw) || "").trim().toLowerCase()).filter(Boolean));
+            const after = await codexCritique({ brand, screenshotPath: afterShot, goal, html: ctx.html });
+            const afterFindings = (after && after.findings) || [];
+            afterFlaws = new Set(afterFindings.map((c) => String((c && c.flaw) || "").trim().toLowerCase()).filter(Boolean));
           } catch { afterFlaws = new Set(); }
           const verifiedTraces = [];
           for (const f of findingObjs) {
@@ -1000,6 +1011,23 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     // rose vs ITS OWN prior turn. Computed identically for BOTH pages.
     if (typeof lastGenScore === "number" && score > lastGenScore) {
       improvements += 1;
+    }
+
+    // ---- CONSTRUCTIVE TRACE (#2): if THIS page's score ROSE vs its own prior turn, the
+    // upgrade we pursued worked → store it as a "winning direction" so memory accumulates
+    // what ADDS quality (not just what to avoid). This is the additive counterpart to the
+    // preventive "do not reintroduce X" traces. Memory-only, deduped, never under ablation.
+    if (isMemory && !ablateMemory && upgrade && typeof lastGenScore === "number" && score > lastGenScore) {
+      const key = "upg:" + upgrade.trim().toLowerCase();
+      if (!tracedKeys.has(key)) {
+        tracedKeys.add(key);
+        const ruleText = `Pursue this winning direction (it raised the score last time): ${upgrade}`;
+        try {
+          await memory.writeTraces(sessionId, [{ role: "elevate", finding: ruleText, severity: "high", nodeSet: [brandToken(brand), "elevate", "high"] }]);
+          tracesCount += 1;
+          gatedEmit({ type: "trace.written", agentId: `${page}-elevate-g${gen}`, summary: ruleText });
+        } catch { /* constructive-trace write best-effort */ }
+      }
     }
 
     // ===================================================================

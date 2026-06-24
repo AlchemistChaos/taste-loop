@@ -609,6 +609,21 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
     ? `\nBRAND VOICE & COPY (write ALL headlines + body copy in THIS voice):\n${voiceLines.join("\n")}\n`
     : "";
 
+  // AIM-FOR-EXCEPTIONAL — the brand guidelines are the ASPIRATION (the bar to HIT), not just
+  // DON'Ts to avoid. A flaw-free page is only "solid ~75"; a page that boldly EMBODIES the brand
+  // at its best earns 90+. The critique/revise loop removes flaws (→ competence); THIS makes the
+  // build REACH (→ excellence). Identical on BOTH pages (fair). brief.aspire carries this turn's
+  // single highest-leverage upgrade when the orchestrator has one (else empty).
+  const aspireDirective = brief && typeof brief.aspire === "string" ? brief.aspire.trim() : "";
+  const aspiration =
+    `\nAIM FOR EXCEPTIONAL — do NOT settle for clean-and-safe:\n` +
+    `- A top reviewer scores 90-100 ONLY for flawless craft: confident hierarchy, a BOLD distinctive ` +
+    `layout, real sharp copy. "Solid with minor flaws" is ~70; merely avoiding the DON'Ts is ~75 — reach past it.\n` +
+    `- Make ONE confident, unmistakable move that embodies the brand at its BEST` +
+    (brand.tagline ? ` ("${brand.tagline}")` : "") +
+    ` — its energy and attitude — not a correct-but-generic page.\n` +
+    (aspireDirective ? `- HIGHEST-LEVERAGE UPGRADE to pursue this turn: ${aspireDirective}\n` : "");
+
   // Shared design-system contract text used by BOTH the fresh build and the
   // revise prompt so a corrected page stays on the system (DS classes/tokens,
   // no CDN, no gradients).
@@ -688,6 +703,7 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
       `BRAND: tone ${tone}; audience ${brand.audience || "general"}.\n` +
       `BRAND DON'Ts (must obey): ${JSON.stringify(donts)}.\n` +
       brandVoice +
+      aspiration +
       rule +
       `\nFIX-RULES — apply ALL of them, non-negotiable:\n${rulesBlock}\n` +
       `\nRevision requirements:\n` +
@@ -724,6 +740,7 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
       `BRAND: tone ${tone}; audience ${brand.audience || "general"}.\n` +
       `BRAND DON'Ts (must obey): ${JSON.stringify(donts)}.\n` +
       brandVoice +
+      aspiration +
       rule +
       rulesDirective +
       (copyHint ? `Copy direction: ${copyHint}\n` : "") +
@@ -1096,24 +1113,31 @@ export async function codexCritique({ brand, screenshotPath, goal, html }) {
     `${JSON.stringify(donts)}.\n\n`;
 
   const jsonInstr =
-    `Return ONLY a JSON array (no prose, no markdown fences) of concrete flaws you ` +
-    `can SEE in the image. Each item:\n` +
-    `{"flaw": "<one concrete, fixable visual flaw>", ` +
-    `"brandRuleCited": "<the closest matching BRAND DON'T, copied VERBATIM from the list above>", ` +
-    `"severity": "high"|"med"|"low"}\n` +
+    `Return ONLY a JSON OBJECT (no prose, no markdown fences):\n` +
+    `{"flaws": [{"flaw":"<one concrete, fixable visual flaw>", ` +
+    `"brandRuleCited":"<closest BRAND DON'T, copied VERBATIM from the list above>", ` +
+    `"severity":"high"|"med"|"low"}],\n` +
+    ` "upgrade": "<the SINGLE highest-leverage CONSTRUCTIVE move that would take this page from ` +
+    `good to EXCEPTIONAL — a bold, SPECIFIC art-direction or copy upgrade that embodies the brand at ` +
+    `its BEST (lean into a brand strength; name the .ds component or section to change). This is NOT a ` +
+    `flaw fix — it is what would make the page a 90+ instead of a competent 75.>",\n` +
+    ` "strengths": ["<what already works and must be preserved>"]}\n` +
     `Rules:\n` +
-    `- brandRuleCited MUST be one of the BRAND DON'Ts above, byte-for-byte. If no DON'T ` +
-    `is violated but the page still has a flaw, cite the CLOSEST DON'T. Do NOT invent rules.\n` +
-    `- severity: high = a clear brand DON'T violation or broken design; med = a real but ` +
-    `non-breaking issue; low = a minor polish nit.\n` +
-    `- If the page is genuinely flawless, return [].`;
+    `- flaws: brandRuleCited MUST be one of the BRAND DON'Ts above, byte-for-byte. If no DON'T is ` +
+    `violated but a flaw remains, cite the CLOSEST DON'T. Do NOT invent rules.\n` +
+    `- severity: high = a clear DON'T violation or broken design; med = a real non-breaking issue; low = a minor nit.\n` +
+    `- upgrade: be specific and ambitious — the ONE change with the biggest quality payoff, even if the page has ` +
+    `NO flaws. NEVER leave it empty.\n` +
+    `- If the page is genuinely flawless, return "flaws": [] but STILL give an upgrade.`;
 
   const prompt =
-    `You are a STRICT senior brand & design AUDITOR. The ATTACHED IMAGE is a ` +
-    `screenshot of a rendered marketing page. List the concrete, fixable visual ` +
-    `flaws — focus on brand DON'T violations, off-brand color/tone, weak hierarchy, ` +
-    `placeholder copy, and legibility. Be deterministic and consistent (temperature 0). ` +
-    `Judge ONLY what you can SEE in the image; the HTML below is supporting context.\n\n` +
+    `You are a senior brand & design LEAD reviewing the ATTACHED IMAGE (a screenshot of a rendered ` +
+    `marketing page). Do TWO things: (1) AUDIT — list the concrete, fixable visual flaws (brand DON'T ` +
+    `violations, off-brand color/tone, weak hierarchy, placeholder copy, legibility); (2) ELEVATE — name ` +
+    `the single highest-leverage CONSTRUCTIVE upgrade that would make this page EXCEPTIONAL (a 90-100: ` +
+    `flawless craft, bold confident layout, sharp copy), embodying the brand at its best. Removing flaws ` +
+    `gets a page to ~75; the upgrade is how it reaches 90. Judge ONLY what you can SEE in the image; the ` +
+    `HTML below is supporting context.\n\n` +
     brandBlock +
     (html && String(html).trim()
       ? `SUPPORTING HTML (context):\n<<<HTML\n${String(html)}\nHTML\n\n`
@@ -1133,7 +1157,23 @@ export async function codexCritique({ brand, screenshotPath, goal, html }) {
     if (tmpShotDir) { try { await rm(tmpShotDir, { recursive: true, force: true }); } catch { /* ignore */ } }
   }
 
-  return normalizeCritiqueFindings(raw, donts);
+  // Parse the constructive critique {flaws, upgrade, strengths}. Tolerant: a bare JSON array
+  // (model ignored the object shape) degrades to flaws-only with no upgrade.
+  let upgrade = "", strengths = [], flawsSource = raw;
+  if (typeof raw === "string") {
+    const m = raw.match(/\{[\s\S]*\}/); // first { … last } — captures the object incl. nested arrays
+    if (m) {
+      try {
+        const obj = JSON.parse(m[0]);
+        if (obj && typeof obj === "object" && !Array.isArray(obj)) {
+          if (Array.isArray(obj.flaws)) flawsSource = JSON.stringify(obj.flaws);
+          if (typeof obj.upgrade === "string") upgrade = obj.upgrade.trim();
+          if (Array.isArray(obj.strengths)) strengths = obj.strengths.map((s) => String(s).trim()).filter(Boolean);
+        }
+      } catch { /* not a clean object — fall back to array extraction below */ }
+    }
+  }
+  return { findings: normalizeCritiqueFindings(flawsSource, donts), upgrade, strengths };
 }
 
 // Word-overlap stopwords for the DON'T enum snap (ignore filler words so a cited

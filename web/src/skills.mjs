@@ -1281,7 +1281,9 @@ async function runCritique({ agent, agentId, page, ctx, deps, emit, result }) {
         screenshotPath: ctx?.critiqueShot || "",
         html,
       });
-      structured = Array.isArray(out) ? out.filter((f) => f && (f.flaw || f.finding)) : [];
+      // codexCritique now returns {findings, upgrade, strengths}; accept a bare array too (back-compat).
+      const arr = Array.isArray(out?.findings) ? out.findings : (Array.isArray(out) ? out : []);
+      structured = arr.filter((f) => f && (f.flaw || f.finding));
     } catch {
       // codexCritique THROWS on Codex failure (no silent fallback at its layer);
       // we catch HERE so a critique miss doesn't kill the run, then degrade to the
@@ -1549,10 +1551,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       // it does NOT consume a chatJSON call).
       async codexCritique() {
         calls.critique++;
-        return [
-          { flaw: "Hero uses a gradient; brand forbids gradients.", brandRuleCited: "Do not use gradients", severity: "high" },
-          { flaw: "Primary CTA lacks the #25F4EE accent.", brandRuleCited: "Do not use gradients", severity: "med" },
-        ];
+        return {
+          findings: [
+            { flaw: "Hero uses a gradient; brand forbids gradients.", brandRuleCited: "Do not use gradients", severity: "high" },
+            { flaw: "Primary CTA lacks the #25F4EE accent.", brandRuleCited: "Do not use gradients", severity: "med" },
+          ],
+          upgrade: "Make the hero headline oversized and bracket it with two-color emphasis marks for a bolder first impression.",
+          strengths: [],
+        };
       },
       async codexBuildSite({ copyHint, rules, priorHtml } = {}) {
         calls.codexBuild++;
