@@ -633,17 +633,26 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     //   The master is given this run's recalled EARLIER-TURN lessons (memory, not
     //   ablated) so it can field a better roster; under ablation it gets none.
     // ===================================================================
-    const { strategy, agents } = await planTeam({
-      brand,
-      goal,
-      isMemory,
-      lessons: lessonsForTeam,
-      // 2.4: each role's flaw attributed last turn, so the master seeds the agent's
-      // next-turn brief with its own miss + attaches credit to the spawn event.
-      // Empty under ablation / on gen 0 / no-memory page.
-      credit: (isMemory && !ablateMemory) ? creditByRole : {},
-    });
-    gatedEmit({ type: "master.planned", roster: agents.map((a) => a.role), strategy });
+    // LEAN TURN (in-run self-improvement): turn 0 builds with the full team; every LATER turn
+    // REFINES the carried page in a targeted way — skip the whole roster rebuild (that was the
+    // churn AND the ~5min/turn cost). The page is improved by the critique->revise steps below
+    // (memory-guided via recalled rules), NOT regenerated from scratch each turn.
+    const isLeanTurn = gen > 0 && typeof pageHtml === "string" && pageHtml.trim().length > 0;
+    let strategy = "";
+    let agents = [];
+    if (!isLeanTurn) {
+      ({ strategy, agents } = await planTeam({
+        brand,
+        goal,
+        isMemory,
+        lessons: lessonsForTeam,
+        // 2.4: each role's flaw attributed last turn, so the master seeds the agent's
+        // next-turn brief with its own miss + attaches credit to the spawn event.
+        // Empty under ablation / on gen 0 / no-memory page.
+        credit: (isMemory && !ablateMemory) ? creditByRole : {},
+      }));
+      gatedEmit({ type: "master.planned", roster: agents.map((a) => a.role), strategy });
+    }
 
     // ---- PROVENANCE / PROMPT-DIFF -------------------------------------
     // When a recalled earlier-turn lesson changed an agent's brief, the master
@@ -652,7 +661,7 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     // prompt-diff panel. scoreAfter is filled once this gen is judged. Suppressed
     // under ablation (no lessons were woven, so nothing upskilled).
     let pendingUpskill = null;
-    if (isMemory && !ablateMemory && lessons.length) {
+    if (!isLeanTurn && isMemory && !ablateMemory && lessons.length) {
       const diff = pickUpskilledAgent(agents);
       if (diff) {
         const d = diff.diff || {};
@@ -719,6 +728,12 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
       _ablate: ablateMemory,
     };
 
+    if (isLeanTurn) {
+      // LEAN TURN: carry the prior page forward and refine it in the critique->revise steps
+      // below (targeted, memory-guided). No roster, no from-scratch rebuild — fast + stable.
+      ctx.html = pageHtml;
+      gatedEmit({ type: "agent.status", agentId: `${page}-refine-g${gen}`, doing: "refining the existing page — targeted, not a rebuild" });
+    } else {
     // Does any agent in this roster already write traces itself (cognee_trace)?
     // If so, the orchestrator must NOT also write the critique findings, or the
     // trace counter would double-count. (The memory studio's master typically
@@ -797,6 +812,7 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     if (ctx.heroImage && !ctx.html.includes(ctx.heroImage)) {
       ctx.html = injectHeroImage(ctx.html, ctx.heroImage);
     }
+    } // end non-lean (full roster build); lean turns carried the page above
 
     // ===================================================================
     // SPINE STEP 3 — CRITIQUE [BOTH] (all-LLM vision; CONTRACTS §3, §9.3).
@@ -1206,7 +1222,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 
     // ---- brandToken / recallNodeName scope recall to canonical token nodes ----
     log(brandToken(brand) === "#FE2C55", "brandToken: primary color is the canonical token node");
-    log(recallNodeName(brand).join(",") === "#FE2C55,critique", "recallNodeName: [token, critique] OR-filter (no keyword-bag)");
+    log(recallNodeName(brand) === null, "recallNodeName: null — recall is NOT node_name-filtered (the bridge filter required the hex in the trace text, which starved recall)");
     const rq = recallQuery(brand, GOAL);
     log(/bold direct/.test(rq) && !/gradient|buzzword|accent/i.test(rq), "recallQuery: brand-grounded, does NOT enumerate the flaws memory fixes");
 
