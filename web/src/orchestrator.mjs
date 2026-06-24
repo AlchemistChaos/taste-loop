@@ -565,6 +565,10 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
   // exact page (in-run self-improvement) instead of rebuilding from scratch. BOTH pages carry
   // their own; the only difference is the memory page's improvements are guided by recall.
   let pageHtml = null;
+  // KEEP-BETTER: score + snapshot ref of the BEST page kept so far. A turn's revise is adopted
+  // ONLY if it beats this; otherwise we revert. The carried page can only improve (no sawtooth).
+  let carriedScore = 0;
+  let carriedRef = "";
   // Generations actually completed = the in-run "Turns" (improvement rounds). This is the
   // real turn-by-turn axis — NOT the per-agent `turns` cap counter below (which is 1:1 with
   // agents spawned). The HUD "Turns" tile reports THIS.
@@ -1111,10 +1115,21 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
 
     // Remember THIS gen's score so the NEXT gen can compute the page-symmetric
     // improvement + the upskill panel's scoreBefore.
-    lastGenScore = score;
-    // CARRY THE PAGE FORWARD: next turn IMPROVES this judged page instead of rebuilding
-    // from scratch. This is the in-run self-improvement compounding (both pages).
-    if (typeof ctx.html === "string" && ctx.html.trim()) pageHtml = ctx.html;
+    // KEEP-BETTER (DGM-style admission gate): ADOPT this turn's page only if it scored higher
+    // than the best we've kept; otherwise REVERT to the prior page so a bad revise can't stick.
+    // The carried page can only improve -> a maturing page, not a sawtooth. Revert the displayed
+    // iframe too so the UI shows the kept page, not the discarded attempt.
+    const candidate = (typeof ctx.html === "string" && ctx.html.trim()) ? ctx.html : null;
+    if (candidate && (pageHtml == null || score > carriedScore)) {
+      pageHtml = candidate;
+      carriedScore = score;
+      if (ctx.htmlRef) carriedRef = ctx.htmlRef;
+    } else if (pageHtml) {
+      ctx.html = pageHtml; // reject the regression — keep the prior (best) page
+      if (carriedRef) gatedEmit({ type: "design.rendered", htmlRef: carriedRef });
+    }
+    // The carried (best) score is the baseline the NEXT turn must beat.
+    lastGenScore = carriedScore;
     gensRun += 1; // this generation completed
   }
 
