@@ -533,6 +533,11 @@
   function shotSrc(ref) {
     if (!ref || typeof ref !== "string") return "";
     if (/^(https?:|data:)/.test(ref)) return ref;
+    // Accept absolute filesystem paths too (the orchestrator may emit /Users/.../run/
+    // snapshots/x.png): extract from the last snapshots/ or shots/ segment so it resolves
+    // to the served URL instead of "run/Users/...". Relative refs match the tail too.
+    const m = ref.match(/(?:snapshots|shots)\/[^/]+$/);
+    if (m) return "run/" + m[0];
     return "run/" + ref.replace(/^\/+/, "");
   }
 
