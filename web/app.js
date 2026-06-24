@@ -960,7 +960,7 @@
       refs.iframe.removeAttribute("src");
       refs.iframeEmpty.classList.remove("hidden");
       ["agents", "turns", "traces", "improvements", "lessons"].forEach((k) => setCounter(p, k, 0));
-      refs.score.textContent = "0";
+      if (refs.score) refs.score.textContent = "0"; // score display removed — guard
     });
     updateScoreUI();
     // Reset the memory graph (per-run, no cross-run carry).
