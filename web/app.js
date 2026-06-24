@@ -277,6 +277,7 @@
   function updateScoreUI() {
     const a = ui["no-memory"], b = ui["memory"];
     if (!a || !b) return;
+    if (!a.score || !b.score) return; // score display removed from the UI — no-op
     a.score.textContent = String(state["no-memory"].score);
     b.score.textContent = String(state["memory"].score);
 
@@ -680,42 +681,55 @@
     }
     g.empty.style.display = "none";
 
-    const W = 720, H = 440, cx = W / 2, cy = H / 2;
-    const ringR = Math.min(W, H) / 2 - 70;
-    const n = tokens.length;
+    const W = 960, H = 680, cx = W / 2, cy = H / 2;
+    const edge = (x1, y1, x2, y2) => g.svg.appendChild(svgEl("line", { x1, y1, x2, y2, class: "gedge-line" }));
+    const lessonNode = (x, y, text) => {
+      g.svg.appendChild(svgEl("circle", { cx: x, cy: y, r: 8, class: "gnode-lesson" }));
+      const t = svgEl("text", { x, y: y - 14, class: "glesson-label", "text-anchor": "middle" });
+      t.textContent = text.length > 40 ? text.slice(0, 39) + "…" : text;
+      g.svg.appendChild(t);
+    };
+    const tokenNode = (x, y, label, r) => {
+      g.svg.appendChild(svgEl("circle", { cx: x, cy: y, r, class: "gnode-token" }));
+      const t = svgEl("text", { x, y: y + 5, class: "gnode-label", "text-anchor": "middle" });
+      t.textContent = label.length > 11 ? label.slice(0, 10) + "…" : label;
+      g.svg.appendChild(t);
+    };
 
+    const n = tokens.length;
+    if (n === 1) {
+      // One token IS the hub: fan ALL its lessons in a full ring so the space is used.
+      const [tk, node] = tokens[0];
+      const lessons = Array.from(node.lessons);
+      const L = lessons.length;
+      const lr = Math.max(160, 120 + L * 6);
+      lessons.forEach((lz, j) => {
+        const a = (j / Math.max(1, L)) * Math.PI * 2 - Math.PI / 2;
+        const lx = cx + Math.cos(a) * lr, ly = cy + Math.sin(a) * lr;
+        edge(cx, cy, lx, ly); lessonNode(lx, ly, lz);
+      });
+      tokenNode(cx, cy, tk, 28);
+      return;
+    }
+
+    // Multiple tokens: hub in the center, tokens on a ring, lessons fan outward.
+    const tokenR = Math.min(W, H) / 2 - 210;
+    tokenNode(cx, cy, "brand", 24);
     tokens.forEach(([tk, node], i) => {
       const ang = (i / n) * Math.PI * 2 - Math.PI / 2;
-      const tx = cx + Math.cos(ang) * ringR;
-      const ty = cy + Math.sin(ang) * ringR;
-
-      // lesson satellites around the token
+      const tx = cx + Math.cos(ang) * tokenR, ty = cy + Math.sin(ang) * tokenR;
+      edge(cx, cy, tx, ty);
       const lessons = Array.from(node.lessons);
+      const L = lessons.length;
+      const lr = Math.max(120, 80 + L * 10);
+      const spread = L > 1 ? Math.min(Math.PI * 1.2, 0.5 * L) : 0;
       lessons.forEach((lz, j) => {
-        const subAng = ang + (j - (lessons.length - 1) / 2) * 0.5;
-        const lx = tx + Math.cos(subAng) * 56;
-        const ly = ty + Math.sin(subAng) * 56;
-        g.svg.appendChild(svgEl("line", { x1: tx, y1: ty, x2: lx, y2: ly, class: "gedge-line" }));
-        g.svg.appendChild(svgEl("circle", { cx: lx, cy: ly, r: 5, class: "gnode-lesson" }));
-        const ll = svgEl("text", { x: lx, y: ly - 9, class: "glesson-label", "text-anchor": "middle" });
-        ll.textContent = lz.length > 22 ? lz.slice(0, 21) + "…" : lz;
-        g.svg.appendChild(ll);
+        const sub = ang + (L > 1 ? (j - (L - 1) / 2) * (spread / (L - 1)) : 0);
+        const lx = tx + Math.cos(sub) * lr, ly = ty + Math.sin(sub) * lr;
+        edge(tx, ty, lx, ly); lessonNode(lx, ly, lz);
       });
-
-      // edge from center "brand" hub to the token
-      g.svg.appendChild(svgEl("line", { x1: cx, y1: cy, x2: tx, y2: ty, class: "gedge-line" }));
-      // token node
-      g.svg.appendChild(svgEl("circle", { cx: tx, cy: ty, r: 16, class: "gnode-token" }));
-      const tl = svgEl("text", { x: tx, y: ty + 3.5, class: "gnode-label", "text-anchor": "middle" });
-      tl.textContent = tk.length > 9 ? tk.slice(0, 8) + "…" : tk;
-      g.svg.appendChild(tl);
+      tokenNode(tx, ty, tk, 20);
     });
-
-    // central hub node
-    g.svg.appendChild(svgEl("circle", { cx, cy, r: 12, class: "gnode-token" }));
-    const hub = svgEl("text", { x: cx, y: cy + 3, class: "gnode-label", "text-anchor": "middle" });
-    hub.textContent = "brand";
-    g.svg.appendChild(hub);
   }
 
   function openGraph() {
