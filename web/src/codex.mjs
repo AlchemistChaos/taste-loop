@@ -524,7 +524,7 @@ function summarizeBrief(brief) {
  *                  mustFix?:string[]}}} args
  * @returns {Promise<string>} clean HTML document string (with inlined DS css)
  */
-export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = [], priorHtml = null, brief = null }) {
+export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = [], priorHtml = null, brief = null, surgical = false }) {
   if (!brand || !brand.colors) throw new Error("codexBuildSite: missing brand/colors");
   if (!goal) throw new Error("codexBuildSite: missing goal");
 
@@ -712,7 +712,11 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
       rule +
       `\nFIX-RULES — apply ALL of them, non-negotiable:\n${rulesBlock}\n` +
       `\nRevision requirements:\n` +
-      (hasRules
+      (surgical
+        ? `- SURGICAL EDIT: apply ONLY the rule(s) above, to the SINGLE section/area they name. Every OTHER ` +
+          `section of the page MUST stay BYTE-FOR-BYTE identical — do NOT rewrite copy, layout, colors, or any ` +
+          `section the rules don't mention. Change the one thing; leave everything else exactly as it is.\n`
+        : hasRules
         ? `- Apply every numbered rule above to THIS page (e.g. add a color where a rule ` +
           `says it is missing, remove a pattern a rule forbids, sharpen tone/copy where a rule demands it).\n`
         : `- Keep the page faithful to its current design; only tighten obvious quality issues you can see.\n`) +
@@ -1098,7 +1102,23 @@ export async function codexJudge({ brand, html, goal, imagePath }) {
  * @param {{brand:object, screenshotPath?:string, goal:string, html?:string}} args
  * @returns {Promise<Array<{flaw:string, brandRuleCited:string, severity:("high"|"med"|"low")}>>}
  */
-export async function codexCritique({ brand, screenshotPath, goal, html }) {
+// Compact DESIGN-SYSTEM INVENTORY for the per-turn GAP AUDIT (turn 2+): the tokens the page
+// SHOULD use + the .ds-* components/brand-toolkit available. The audit compares the rendered
+// page against this to find what is MISSING or UNDERUSED, then fixes the one biggest gap.
+export function designInventory(brand) {
+  const tokens = summarizeTokens(brand);
+  const components =
+    "COMPONENTS + BRAND TOOLKIT the page should USE (flag any that are missing/underused): " +
+    ".ds-hero/.ds-hero--type, .ds-display (mega headline), .ds-statement (full-bleed type moment), " +
+    ".ds-quote + .ds-quote-attr (pull-quote), .ds-bignum (oversized stat number), .ds-grid-asym " +
+    "(asymmetric split), .ds-feature-grid, .ds-stat-band, .ds-steps, .ds-cta-band, " +
+    ".ds-card/.ds-surface/.ds-feature, .ds-chip (eyebrow pills); .ds-mark (emphasis marks — bracket a " +
+    "headline with TWO different-color marks), .ds-pattern (dot bands), .ds-bubble-cluster/.ds-bubble-text, " +
+    ".ds-emph/.ds-emph-ink (one-keyword emphasis), .ds-text-outline.";
+  return tokens + "\n" + components;
+}
+
+export async function codexCritique({ brand, screenshotPath, goal, html, inventory = "" }) {
   if (!brand || !brand.colors) throw new Error("codexCritique: missing brand/colors");
   if (!goal) throw new Error("codexCritique: missing goal");
 
@@ -1127,35 +1147,44 @@ export async function codexCritique({ brand, screenshotPath, goal, html }) {
     `BRAND DON'Ts (the rule enum — cite one of these VERBATIM as brandRuleCited): ` +
     `${JSON.stringify(donts)}.\n\n`;
 
+  // GAP-AUDIT MODE (turn 2+): an inventory is supplied -> the "upgrade" becomes the single
+  // highest-value DESIGN-SYSTEM GAP to close surgically (one area). Else the general constructive
+  // upgrade (turns 0-1 / no inventory).
+  const inv = String(inventory || "").trim();
+  const inventoryBlock = inv
+    ? `DESIGN SYSTEM INVENTORY (audit the page for GAPS — tokens/components below that are MISSING or UNDERUSED on the rendered page):\n${inv}\n\n`
+    : "";
+  const upgradeField = inv
+    ? ` "upgrade": "<the SINGLE highest-value GAP to close NOW: name the exact SECTION/area + the ONE token or .ds-* component from the inventory that is missing or underused there + the small, surgical change to add it. ONE area only — a targeted fix, NOT a redesign.>",\n`
+    : ` "upgrade": "<the SINGLE highest-leverage CONSTRUCTIVE move that would take this page from good to EXCEPTIONAL — a bold, SPECIFIC art-direction or copy upgrade that embodies the brand at its BEST (lean into a brand strength; name the .ds component or section to change). This is NOT a flaw fix — it is what would make the page a 90+ instead of a competent 75.>",\n`;
+  const upgradeRule = inv
+    ? `- upgrade: pick the ONE biggest gap vs the inventory (a token/component the page should use but doesn't, in a specific section). Keep it SMALL + surgical — one area. NO photos/images/video. NEVER empty.\n`
+    : `- upgrade: be specific and ambitious — the ONE change with the biggest quality payoff, even if the page has NO flaws. NEVER leave it empty. CONSTRAINT: this page has NO photographs and none can be added — propose a TYPE, LAYOUT, or COPY upgrade ONLY (e.g. mega .ds-display type, an asymmetric .ds-grid-asym split, a .ds-quote pull-quote, a .ds-bignum stat). NEVER suggest adding a photo/image/video.\n`;
+
   const jsonInstr =
     `Return ONLY a JSON OBJECT (no prose, no markdown fences):\n` +
     `{"flaws": [{"flaw":"<one concrete, fixable visual flaw>", ` +
     `"brandRuleCited":"<closest BRAND DON'T, copied VERBATIM from the list above>", ` +
     `"severity":"high"|"med"|"low"}],\n` +
-    ` "upgrade": "<the SINGLE highest-leverage CONSTRUCTIVE move that would take this page from ` +
-    `good to EXCEPTIONAL — a bold, SPECIFIC art-direction or copy upgrade that embodies the brand at ` +
-    `its BEST (lean into a brand strength; name the .ds component or section to change). This is NOT a ` +
-    `flaw fix — it is what would make the page a 90+ instead of a competent 75.>",\n` +
+    upgradeField +
     ` "strengths": ["<what already works and must be preserved>"]}\n` +
     `Rules:\n` +
     `- flaws: brandRuleCited MUST be one of the BRAND DON'Ts above, byte-for-byte. If no DON'T is ` +
     `violated but a flaw remains, cite the CLOSEST DON'T. Do NOT invent rules.\n` +
     `- severity: high = a clear DON'T violation or broken design; med = a real non-breaking issue; low = a minor nit.\n` +
-    `- upgrade: be specific and ambitious — the ONE change with the biggest quality payoff, even if the page has ` +
-    `NO flaws. NEVER leave it empty. CONSTRAINT: this page has NO photographs and none can be added (no image ` +
-    `generation) — propose a TYPE, LAYOUT, or COPY upgrade ONLY (e.g. mega .ds-display type, an asymmetric ` +
-    `.ds-grid-asym split, a .ds-quote pull-quote, a .ds-bignum stat). NEVER suggest adding a photo/image/video.\n` +
+    upgradeRule +
     `- If the page is genuinely flawless, return "flaws": [] but STILL give an upgrade.`;
 
   const prompt =
     `You are a senior brand & design LEAD reviewing the ATTACHED IMAGE (a screenshot of a rendered ` +
     `marketing page). Do TWO things: (1) AUDIT — list the concrete, fixable visual flaws (brand DON'T ` +
-    `violations, off-brand color/tone, weak hierarchy, placeholder copy, legibility); (2) ELEVATE — name ` +
-    `the single highest-leverage CONSTRUCTIVE upgrade that would make this page EXCEPTIONAL (a 90-100: ` +
-    `flawless craft, bold confident layout, sharp copy), embodying the brand at its best. Removing flaws ` +
-    `gets a page to ~75; the upgrade is how it reaches 90. Judge ONLY what you can SEE in the image; the ` +
-    `HTML below is supporting context.\n\n` +
+    `violations, off-brand color/tone, weak hierarchy, placeholder copy, legibility); (2) ELEVATE — ` +
+    (inv
+      ? `find the single highest-value GAP vs the DESIGN SYSTEM INVENTORY below (a token/component the page should be using but isn't) and the one small change to close it. `
+      : `name the single highest-leverage CONSTRUCTIVE upgrade that would make this page EXCEPTIONAL (a 90-100: flawless craft, bold confident layout, sharp copy), embodying the brand at its best. Removing flaws gets a page to ~75; the upgrade is how it reaches 90. `) +
+    `Judge ONLY what you can SEE in the image; the HTML below is supporting context.\n\n` +
     brandBlock +
+    inventoryBlock +
     (html && String(html).trim()
       ? `SUPPORTING HTML (context):\n<<<HTML\n${String(html)}\nHTML\n\n`
       : "") +

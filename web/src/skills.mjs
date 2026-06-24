@@ -679,7 +679,7 @@ async function runHtmlBuild({ agent, agentId, gen, page, ctx, deps, emit }) {
 //   and design.rendered{htmlRef} AFTER the corrected page is written.
 // - THROWS on failure (no fallback) — a failed revise must surface, not paper over.
 // ---------------------------------------------------------------------------
-export async function reviseHtml({ brand, goal, priorHtml, rules, page, gen, seq, deps, emit, snapDir: snapDirArg }) {
+export async function reviseHtml({ brand, goal, priorHtml, rules, page, gen, seq, deps, emit, snapDir: snapDirArg, surgical = false }) {
   if (!deps || typeof deps.codexBuildSite !== "function") {
     throw new Error("reviseHtml: deps.codexBuildSite is required");
   }
@@ -704,6 +704,7 @@ export async function reviseHtml({ brand, goal, priorHtml, rules, page, gen, seq
     goal: g,
     priorHtml: String(priorHtml),
     rules: ruleList,
+    ...(surgical ? { surgical: true } : {}),
   });
 
   // Persist the corrected snapshot under the frozen revise name. Prefer the

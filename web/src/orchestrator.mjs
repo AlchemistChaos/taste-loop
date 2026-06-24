@@ -41,7 +41,7 @@
 import { planTeam } from "./team.mjs";
 import { runAgent, reviseHtml } from "./skills.mjs";
 import { judgeSite } from "./judge.mjs";
-import { codexCritique, codexBuildSite, codexRun } from "./codex.mjs";
+import { codexCritique, codexBuildSite, codexRun, designInventory } from "./codex.mjs";
 import { renderShot } from "./render.mjs";
 import { chat, chatJSON } from "./ollama.mjs";
 
@@ -638,6 +638,9 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     // churn AND the ~5min/turn cost). The page is improved by the critique->revise steps below
     // (memory-guided via recalled rules), NOT regenerated from scratch each turn.
     const isLeanTurn = gen > 0 && typeof pageHtml === "string" && pageHtml.trim().length > 0;
+    // Turn 0 builds, turn 1 does a whole-page refine, turn 2+ does ONE targeted token-gap fix
+    // (audit the page vs the design-system inventory -> fix the single biggest gap, keep the rest).
+    const surgicalTurn = isLeanTurn && gen >= 2;
     let strategy = "";
     let agents = [];
     if (!isLeanTurn) {
@@ -832,7 +835,7 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     let upgrade = ""; // the constructive critique: the single highest-leverage "make it great" move
     try {
       // Pass html too so codexCritique can render its OWN PNG if our pre-render missed.
-      const cr = await codexCritique({ brand, screenshotPath: beforeShot, goal, html: ctx.html });
+      const cr = await codexCritique({ brand, screenshotPath: beforeShot, goal, html: ctx.html, ...(surgicalTurn ? { inventory: designInventory(brand) } : {}) });
       critique = (cr && cr.findings) || [];
       upgrade = (cr && typeof cr.upgrade === "string") ? cr.upgrade.trim() : "";
     } catch (err) {
@@ -905,25 +908,33 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     //   on this turn's findings only. So the win is NOT "two attempts."
     // ===================================================================
     {
-      // Same-turn findings drive every page's revise.
-      let reviseRules = mergeRules([], flawTexts);
-      // Memory (non-ablate) ALSO incorporates recalled prior-turn traces.
-      if (isMemory && !ablateMemory && recalledRules.length) {
-        reviseRules = mergeRules(reviseRules, recalledRules);
-      }
-      // CONSTRUCTIVE: also PURSUE this turn's highest-leverage upgrade (excellence, not just
-      // flaw-removal). Symmetric — both pages get their OWN critique's upgrade; the recalled
-      // PRIOR winning directions above are the memory-only differentiator.
-      if (upgrade) {
-        reviseRules = mergeRules(reviseRules, [`Beyond fixing the flaws, PURSUE this upgrade to make the page exceptional: ${upgrade}`]);
+      // Turn 2+ (surgicalTurn): apply ONLY the audited gap fix (the upgrade) — one small,
+      // targeted change, keep the rest of the page intact. Turns 0-1: whole-page refine
+      // (this turn's flaws + recalled prior-turn traces + the constructive upgrade).
+      let reviseRules;
+      if (surgicalTurn) {
+        reviseRules = upgrade ? [`Make ONLY this one targeted fix (close this design-system gap): ${upgrade}`] : [];
+      } else {
+        reviseRules = mergeRules([], flawTexts);
+        // Memory (non-ablate) ALSO incorporates recalled prior-turn traces.
+        if (isMemory && !ablateMemory && recalledRules.length) {
+          reviseRules = mergeRules(reviseRules, recalledRules);
+        }
+        // CONSTRUCTIVE: also PURSUE this turn's highest-leverage upgrade (excellence, not just
+        // flaw-removal). Symmetric — both pages get their OWN critique's upgrade.
+        if (upgrade) {
+          reviseRules = mergeRules(reviseRules, [`Beyond fixing the flaws, PURSUE this upgrade to make the page exceptional: ${upgrade}`]);
+        }
       }
       if (reviseRules.length && ctx.html) {
         gatedEmit({
           type: "agent.status",
           agentId: `${page}-revise-g${gen}`,
-          doing: isMemory && !ablateMemory
-            ? "applying this turn's findings + recalled prior-turn traces"
-            : "applying this turn's critique findings",
+          doing: surgicalTurn
+            ? "fixing one targeted design-system gap (surgical — rest of page untouched)"
+            : (isMemory && !ablateMemory
+                ? "applying this turn's findings + recalled prior-turn traces"
+                : "applying this turn's critique findings"),
         });
         const reviseSeq = Number.isFinite(ctx.seq) ? ctx.seq + 1 : 1;
         ctx.seq = reviseSeq;
@@ -940,6 +951,7 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
             deps,
             emit: gatedEmit,
             snapDir: snapDir(),
+            ...(surgicalTurn ? { surgical: true } : {}),
           });
           if (revised && typeof revised.html === "string" && revised.html.trim()) {
             ctx.html = revised.html; // the JUDGE scores the IMPROVED page
