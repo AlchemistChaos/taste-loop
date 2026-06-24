@@ -626,12 +626,21 @@ async function runHtmlBuild({ agent, agentId, gen, page, ctx, deps, emit }) {
     ...asLines(brief.mustFix),
   ]);
 
+  // IN-RUN SELF-IMPROVEMENT: if a prior-turn page was carried in (ctx.priorPageHtml),
+  // IMPROVE it (codexBuildSite REVISE mode via priorHtml) instead of building from scratch.
+  // Turn 0 has none -> fresh build. Both pages do this; the memory page's `rules` carry the
+  // recalled prior-turn fixes that guide the improvement (no-memory's rules are empty).
+  const priorPageHtml =
+    ctx && typeof ctx.priorPageHtml === "string" && ctx.priorPageHtml.trim()
+      ? ctx.priorPageHtml
+      : null;
   const html = await codexBuildSite({
     brand,
     goal,
     copyHint,
     lesson: lessonText,
     ...(rules.length ? { rules } : {}),
+    ...(priorPageHtml ? { priorHtml: priorPageHtml } : {}),
   });
 
   // Persist a snapshot. The orchestrator owns the seq; we accept ctx.seq and

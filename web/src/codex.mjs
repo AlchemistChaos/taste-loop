@@ -708,6 +708,7 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
       `BRAND DON'Ts (must obey): ${JSON.stringify(donts)}.\n` +
       brandVoice +
       aspiration +
+      (copyHint ? `\nTHIS TURN'S DIRECTION (improve toward this; keep what already works):\n${copyHint}\n` : "") +
       rule +
       `\nFIX-RULES — apply ALL of them, non-negotiable:\n${rulesBlock}\n` +
       `\nRevision requirements:\n` +

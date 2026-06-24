@@ -561,6 +561,10 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
   let improvements = 0;
   let lessonsCount = 0;
   let bestScore = 0;
+  // The page CARRIED across turns. Turn 0 builds it fresh; every later turn IMPROVES this
+  // exact page (in-run self-improvement) instead of rebuilding from scratch. BOTH pages carry
+  // their own; the only difference is the memory page's improvements are guided by recall.
+  let pageHtml = null;
   // The most recent per-gen judged score for THIS page. Feeds the prompt-diff
   // panel's scoreBefore (the prior gen's score for the page that just upskilled).
   let lastGenScore = null;
@@ -676,6 +680,9 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
       // via sessionIdFrom(ctx) and REFUSE to reconstruct the legacy "${page}-run"
       // hardcode — the orchestrator MUST thread it (H4).
       sessionId,
+      // The prior turn's page (null on turn 0). When set, the builder IMPROVES this page
+      // instead of building from scratch — in-run self-improvement, both pages.
+      priorPageHtml: pageHtml,
       brief: {
         copy: null,
         sectionOrder: [],
@@ -1085,6 +1092,9 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     // Remember THIS gen's score so the NEXT gen can compute the page-symmetric
     // improvement + the upskill panel's scoreBefore.
     lastGenScore = score;
+    // CARRY THE PAGE FORWARD: next turn IMPROVES this judged page instead of rebuilding
+    // from scratch. This is the in-run self-improvement compounding (both pages).
+    if (typeof ctx.html === "string" && ctx.html.trim()) pageHtml = ctx.html;
   }
 
   gatedEmit({
