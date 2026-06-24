@@ -771,8 +771,9 @@
         break;
       }
       case "agent.turn": {
-        st.turns = Math.min(TURN_CAP, st.turns + 1);
-        setCounter(page, "turns", st.turns);
+        // NOTE: agent.turn fires once per agent (1:1 with agent.spawned) — it does NOT
+        // drive the "Turns" tile anymore. "Turns" = GENERATIONS (in-run improvement
+        // rounds), set on score.updated below. agent.turn only flags the agent active.
         markActive(page, ev.agentId);
         break;
       }
@@ -838,6 +839,12 @@
         break;
       }
       case "score.updated": {
+        // "Turns" tile = GENERATION count (the in-run improvement rounds). score.updated
+        // fires once per gen per page at gen-end, so gen+1 = generations completed.
+        if (typeof ev.gen === "number") {
+          st.turns = Math.min(TURN_CAP, ev.gen + 1);
+          setCounter(page, "turns", st.turns);
+        }
         // H2: ev.score is now THIS gen's judged score (per-gen), NOT bestScore.
         // -> the chart plots (gen, score); the headline tracks the best so far so
         //    the big number never regresses mid-run (run.finished.totals.score is

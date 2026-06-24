@@ -565,6 +565,10 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
   // exact page (in-run self-improvement) instead of rebuilding from scratch. BOTH pages carry
   // their own; the only difference is the memory page's improvements are guided by recall.
   let pageHtml = null;
+  // Generations actually completed = the in-run "Turns" (improvement rounds). This is the
+  // real turn-by-turn axis — NOT the per-agent `turns` cap counter below (which is 1:1 with
+  // agents spawned). The HUD "Turns" tile reports THIS.
+  let gensRun = 0;
   // The most recent per-gen judged score for THIS page. Feeds the prompt-diff
   // panel's scoreBefore (the prior gen's score for the page that just upskilled).
   let lastGenScore = null;
@@ -1095,13 +1099,14 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     // CARRY THE PAGE FORWARD: next turn IMPROVES this judged page instead of rebuilding
     // from scratch. This is the in-run self-improvement compounding (both pages).
     if (typeof ctx.html === "string" && ctx.html.trim()) pageHtml = ctx.html;
+    gensRun += 1; // this generation completed
   }
 
   gatedEmit({
     type: "run.finished",
     totals: {
       agentsSpawned,
-      turns,
+      turns: gensRun, // "Turns" = generations completed (the in-run improvement rounds)
       traces: tracesCount,
       improvements,
       lessons: lessonsCount,
@@ -1111,7 +1116,7 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
 
   return {
     bestScore,
-    turns,
+    turns: gensRun,
     agentsSpawned,
     traces: tracesCount,
     improvements,
