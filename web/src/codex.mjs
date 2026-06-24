@@ -639,7 +639,11 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
     `and COMPOSED brand components: .ds-hero, .ds-feature-grid, .ds-stat-band, .ds-steps, .ds-cta-band, ` +
     `.ds-bubble-cluster, .ds-chip, .ds-grid-2, .ds-grid-3; and the BRAND TOOLKIT: emphasis marks ` +
     `.ds-mark(-cross/-chevron/-bracket)(-splash/-razz/-ink/-white), .ds-pattern(-splash/-razz/-ink) dot patterns, ` +
-    `.ds-bubble-text(-splash/-razz/-stroke) word-holding pills, .ds-emph-ink (black keyword emphasis), .ds-rrect-mixed.\n` +
+    `.ds-bubble-text(-splash/-razz/-stroke) word-holding pills, .ds-emph-ink (black keyword emphasis), .ds-rrect-mixed; ` +
+    `and the EXPRESSIVE TYPE & EDITORIAL set (the keyless "image" system — type carries the page): ` +
+    `.ds-display (MEGA hero type, the headline IS the visual), .ds-statement (full-bleed all-type section), ` +
+    `.ds-text-outline (outline ONE word for filled+hollow contrast), .ds-quote + .ds-quote-attr (editorial ` +
+    `pull-quote), .ds-bignum (oversized graphic number for a stat/proof), .ds-grid-asym (asymmetric editorial split).\n` +
     `BUILD USING THESE: put class="ds-body" on <body>; use the .ds-* classes and the ` +
     `var(--color-*)/var(--font-*)/var(--space-*) tokens for ALL styling. Do NOT hardcode hex colors ` +
     `or font stacks that the system already provides — reference the variables/classes. ` +
@@ -760,6 +764,16 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
       `for the hero; .ds-bubble-text pills are the standalone word/CTA holders. Every image is a real .ds-figure media frame (rounded 25%/50%, optional ` +
       `10° rotation) — NEVER a bare rectangle or grey placeholder. Generous 96px/128px section padding. NO ` +
       `gradients, NO drop shadows; create depth with layered flat shapes only.\n` +
+      `\nTYPE IS THE HERO (there are NO photographs — type carries the page): make the H1 a MEGA .ds-display ` +
+      `headline (ultra-tight leading, breaks the grid — the headline IS the artwork, not an afterthought). You may ` +
+      `outline ONE word with .ds-text-outline for filled+hollow contrast. A flat, text-only page must read as BOLD ` +
+      `and distinctive, NEVER as a clean-but-generic landing page.\n` +
+      `COMPOSITION — vary it; do NOT stack identical centered blocks. Use at least ONE .ds-grid-asym asymmetric ` +
+      `split, ONE .ds-statement full-bleed type moment, ONE .ds-quote editorial pull-quote (text-based credibility), ` +
+      `and a proof/stat section anchored by a .ds-bignum oversized number. Alternate alignment and rhythm.\n` +
+      `COPY — every line is SHARP and SPECIFIC: provocative, native, concrete (a real number, a real outcome). ` +
+      `Headlines punch in under 8 words. BAN filler/generic marketing ("built for discovery", "best-in-class", ` +
+      `"unlock growth", "supercharge") — write like a creator, not a brand deck.\n` +
       `\nBuild a single self-contained responsive HTML5 page with EXACTLY ${sectionCount} sections ` +
       `(${sections.join(", ")}). Write real, on-brand marketing copy (NO lorem, NO placeholder text). ` +
       `Use flat brand-color blocks only — no gradients, no drop shadows.\n` +
@@ -1127,7 +1141,9 @@ export async function codexCritique({ brand, screenshotPath, goal, html }) {
     `violated but a flaw remains, cite the CLOSEST DON'T. Do NOT invent rules.\n` +
     `- severity: high = a clear DON'T violation or broken design; med = a real non-breaking issue; low = a minor nit.\n` +
     `- upgrade: be specific and ambitious — the ONE change with the biggest quality payoff, even if the page has ` +
-    `NO flaws. NEVER leave it empty.\n` +
+    `NO flaws. NEVER leave it empty. CONSTRAINT: this page has NO photographs and none can be added (no image ` +
+    `generation) — propose a TYPE, LAYOUT, or COPY upgrade ONLY (e.g. mega .ds-display type, an asymmetric ` +
+    `.ds-grid-asym split, a .ds-quote pull-quote, a .ds-bignum stat). NEVER suggest adding a photo/image/video.\n` +
     `- If the page is genuinely flawless, return "flaws": [] but STILL give an upgrade.`;
 
   const prompt =

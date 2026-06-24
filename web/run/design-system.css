@@ -95,6 +95,7 @@
   --font-size-subhead: 1.5rem;   /* 24px  · 1.5x */
   --font-size-h2: 3rem;          /* 48px  · 3x   */
   --font-size-h1: 4.5rem;        /* 72px  · 4.5x */
+  --font-size-display: 9rem;     /* 144px · type AS the visual — the keyless "image" */
 
   /* ---- Weights --------------------------------------------------------- */
   --font-weight-regular: 400;
@@ -441,6 +442,67 @@ body.ds-body {
 .ds-hero-grid:not(:has(.ds-hero-media :is(img, svg))) { grid-template-columns: 1fr; max-width: 60rem; }
 .ds-hero-grid:not(:has(.ds-hero-media :is(img, svg))) .ds-hero-title { font-size: clamp(3.25rem, 10vw, var(--font-size-h1)); max-width: 20ch; }
 .ds-hero-grid:not(:has(.ds-hero-media :is(img, svg))) .ds-hero-media { display: none; }
+
+/* ---------------------------------------------------------------------------
+   2.1c  EXPRESSIVE TYPE & EDITORIAL LAYOUT — the keyless "image" system.
+   With no photography, TYPE carries the page: oversized display headlines,
+   full-bleed type statements, pull quotes, big graphic numbers, and asymmetric
+   editorial grids. This is how a text-only page reads as BOLD/exceptional
+   instead of "clean but generic." All on-brand (one brand color per surface,
+   flat, no gradients/shadows) and identical for both pages.
+   --------------------------------------------------------------------------- */
+/* MEGA display type — the headline IS the hero graphic. Ultra-tight leading. */
+.ds-display {
+  font-family: var(--font-heading);
+  font-size: clamp(3.5rem, 15vw, var(--font-size-display));
+  font-weight: var(--font-weight-bold);
+  line-height: 0.92;
+  letter-spacing: var(--tracking-headline);
+  margin: 0;
+}
+/* Full-bleed all-type statement section (a hero or mid-page type moment). */
+.ds-statement { padding-top: var(--space-8); padding-bottom: var(--space-8); }
+.ds-statement .ds-display { max-width: 16ch; }
+/* Type-as-graphic: outline ONE word for filled+hollow contrast (brand color via
+   currentColor; use sparingly — a single word, never a whole headline). */
+.ds-text-outline {
+  color: transparent;
+  -webkit-text-stroke: 2px currentColor;
+  text-stroke: 2px currentColor;
+}
+/* Editorial PULL QUOTE — a text-based voice/credibility moment (no photo needed). */
+.ds-quote {
+  font-family: var(--font-heading);
+  font-size: clamp(1.75rem, 5vw, var(--font-size-h2));
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--tracking-headline);
+  max-width: 22ch;
+  margin: 0;
+}
+.ds-quote-attr {
+  font-family: var(--font-body);
+  font-size: var(--font-size-body);
+  color: var(--color-muted);
+  margin-top: var(--space-4);
+}
+/* BIG GRAPHIC NUMBER — an oversized numeral as the visual anchor of a stat/proof. */
+.ds-bignum {
+  font-family: var(--font-heading);
+  font-size: clamp(4rem, 12vw, 11rem);
+  font-weight: var(--font-weight-bold);
+  line-height: 0.85;
+  letter-spacing: var(--tracking-headline);
+  margin: 0;
+}
+/* ASYMMETRIC editorial grid — breaks the even grid-2/grid-3 monotony. */
+.ds-grid-asym {
+  display: grid;
+  gap: var(--space-8);
+  grid-template-columns: 1.6fr 1fr;
+  align-items: start;
+}
+@media (max-width: 860px) { .ds-grid-asym { grid-template-columns: 1fr; } }
 
 /* A media frame with no real image is dead space — never render it as a grey box. */
 .ds-figure:not(:has(img, svg)) { display: none; }
