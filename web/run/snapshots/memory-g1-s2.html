@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TikTok for Business — turn 60-second videos into customers</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TikTok for Business | Turn 60-second videos into customers</title>
 <style data-ds="taste-loop-design-system">
 /* ===========================================================================
    TikTok For Business — Design System
@@ -102,6 +102,7 @@
   --font-size-subhead: 1.5rem;   /* 24px  · 1.5x */
   --font-size-h2: 3rem;          /* 48px  · 3x   */
   --font-size-h1: 4.5rem;        /* 72px  · 4.5x */
+  --font-size-display: 9rem;     /* 144px · type AS the visual — the keyless "image" */
 
   /* ---- Weights --------------------------------------------------------- */
   --font-weight-regular: 400;
@@ -449,6 +450,67 @@ body.ds-body {
 .ds-hero-grid:not(:has(.ds-hero-media :is(img, svg))) .ds-hero-title { font-size: clamp(3.25rem, 10vw, var(--font-size-h1)); max-width: 20ch; }
 .ds-hero-grid:not(:has(.ds-hero-media :is(img, svg))) .ds-hero-media { display: none; }
 
+/* ---------------------------------------------------------------------------
+   2.1c  EXPRESSIVE TYPE & EDITORIAL LAYOUT — the keyless "image" system.
+   With no photography, TYPE carries the page: oversized display headlines,
+   full-bleed type statements, pull quotes, big graphic numbers, and asymmetric
+   editorial grids. This is how a text-only page reads as BOLD/exceptional
+   instead of "clean but generic." All on-brand (one brand color per surface,
+   flat, no gradients/shadows) and identical for both pages.
+   --------------------------------------------------------------------------- */
+/* MEGA display type — the headline IS the hero graphic. Ultra-tight leading. */
+.ds-display {
+  font-family: var(--font-heading);
+  font-size: clamp(3.5rem, 15vw, var(--font-size-display));
+  font-weight: var(--font-weight-bold);
+  line-height: 0.92;
+  letter-spacing: var(--tracking-headline);
+  margin: 0;
+}
+/* Full-bleed all-type statement section (a hero or mid-page type moment). */
+.ds-statement { padding-top: var(--space-8); padding-bottom: var(--space-8); }
+.ds-statement .ds-display { max-width: 16ch; }
+/* Type-as-graphic: outline ONE word for filled+hollow contrast (brand color via
+   currentColor; use sparingly — a single word, never a whole headline). */
+.ds-text-outline {
+  color: transparent;
+  -webkit-text-stroke: 2px currentColor;
+  text-stroke: 2px currentColor;
+}
+/* Editorial PULL QUOTE — a text-based voice/credibility moment (no photo needed). */
+.ds-quote {
+  font-family: var(--font-heading);
+  font-size: clamp(1.75rem, 5vw, var(--font-size-h2));
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+  letter-spacing: var(--tracking-headline);
+  max-width: 22ch;
+  margin: 0;
+}
+.ds-quote-attr {
+  font-family: var(--font-body);
+  font-size: var(--font-size-body);
+  color: var(--color-muted);
+  margin-top: var(--space-4);
+}
+/* BIG GRAPHIC NUMBER — an oversized numeral as the visual anchor of a stat/proof. */
+.ds-bignum {
+  font-family: var(--font-heading);
+  font-size: clamp(4rem, 12vw, 11rem);
+  font-weight: var(--font-weight-bold);
+  line-height: 0.85;
+  letter-spacing: var(--tracking-headline);
+  margin: 0;
+}
+/* ASYMMETRIC editorial grid — breaks the even grid-2/grid-3 monotony. */
+.ds-grid-asym {
+  display: grid;
+  gap: var(--space-8);
+  grid-template-columns: 1.6fr 1fr;
+  align-items: start;
+}
+@media (max-width: 860px) { .ds-grid-asym { grid-template-columns: 1fr; } }
+
 /* A media frame with no real image is dead space — never render it as a grey box. */
 .ds-figure:not(:has(img, svg)) { display: none; }
 
@@ -742,122 +804,160 @@ body.ds-body {
 </style>
 </head>
 <body class="ds-body">
-  <main>
-    <section id="hero" class="ds-section ds-bg ds-hero ds-hero--type">
-      <div class="ds-container ds-stack">
-        <div class="ds-chip">TikTok for Business</div>
+  <section class="ds-hero ds-hero--type ds-bg" id="hero">
+    <div class="ds-container ds-stack">
+      <div class="ds-chip">TikTok for Business</div>
+      <h1 class="ds-display ds-hero-title">
+        Don’t make ads.<br>
+        Make TikToks that make <span class="ds-emph">customers.</span>
+      </h1>
+      <p class="ds-subhead">
+        Shoot it native. Show the product early. Give people a reason to tap before they swipe.
+      </p>
+      <div class="ds-actions">
+        <a class="ds-btn ds-btn-primary" href="#cta">Start making TikToks</a>
+        <a class="ds-btn ds-btn-outline" href="#how-it-works">See the three moves</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="ds-section ds-bg-light" id="problem">
+    <div class="ds-container ds-stack">
+      <div class="ds-grid-asym">
         <div class="ds-stack">
-          <p class="ds-caption">
-            <span class="ds-mark ds-mark-cross ds-mark-splash" aria-hidden="true"></span>
+          <div class="ds-chip">Why this works</div>
+          <h2 class="ds-h2">People don’t want the pitch. They want the part worth watching.</h2>
+          <p class="ds-lead">
+            If it looks like an ad, it gets swiped. If it feels useful, funny, surprising, or sharply relevant, it earns the next second and the next tap.
           </p>
-          <h1 class="ds-h1 ds-hero-title">Don’t Make Ads. Make <span class="ds-emph">TikToks.</span> <span class="ds-mark ds-mark-chevron ds-mark-razz" aria-hidden="true"></span></h1>
-          <p class="ds-subhead">Turn quick ideas, creator energy, and 60-second videos into clicks, carts, and customers without making your brand feel like a brand.</p>
-          <div class="ds-actions">
-            <a href="#cta" class="ds-btn ds-btn-primary">Start making TikToks</a>
-            <a href="#how-it-works" class="ds-btn ds-btn-outline">See how it works</a>
-          </div>
+        </div>
+        <div class="ds-surface-light ds-stack ds-rrect-mixed">
+          <p class="ds-subhead">One strong hook can do more than a very polished maybe.</p>
+          <p class="ds-body-text">
+            The creative that lands here usually feels like it belongs on the For You Page, not in a boardroom. Less polish. More pull.
+          </p>
+          <p class="ds-caption">That’s the shift marketers can actually use.</p>
         </div>
       </div>
-    </section>
 
-    <section id="problem" class="ds-section ds-bg-light">
-      <div class="ds-container ds-stack">
-        <div class="ds-chip">The problem</div>
-        <div class="ds-grid-2">
-          <div class="ds-stack">
-            <h2 class="ds-h2">Polished ads get skipped. Native videos get watched.</h2>
-            <p class="ds-lead">People come to TikTok to find something real, fast, funny, useful, or all four. If your creative feels like homework, they keep scrolling.</p>
-          </div>
-          <div class="ds-feature-grid ds-grid-3">
-            <article class="ds-surface ds-stack">
-              <h3 class="ds-subhead">Too staged</h3>
-              <p class="ds-body-text">Big setup. Big budget. Tiny payoff. That shiny ad energy can kill the vibe before your message even lands.</p>
-            </article>
-            <article class="ds-surface ds-stack">
-              <h3 class="ds-subhead">Too slow</h3>
-              <p class="ds-body-text">Traditional production cycles move like molasses. TikTok moves like trends do: now.</p>
-            </article>
-            <article class="ds-surface ds-stack">
-              <h3 class="ds-subhead">Too forgettable</h3>
-              <p class="ds-body-text">When every brand sounds “optimized,” nobody remembers it. What sticks is personality with a clear next step.</p>
-            </article>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section id="how-it-works" class="ds-section ds-bg-primary ds-steps">
-      <div class="ds-container ds-stack">
-        <div class="ds-chip">How it works</div>
-        <div class="ds-pattern ds-pattern-ink" aria-hidden="true"></div>
-        <div class="ds-stack">
-          <h2 class="ds-h2">Make the video feel fun. Make the outcome feel obvious.</h2>
-          <p class="ds-lead">This is creator-style marketing with a job to do: grab attention, say one clear thing, and give people one easy move to make.</p>
-        </div>
+      <div class="ds-feature-grid">
         <div class="ds-grid-3">
-          <article class="ds-surface ds-stack">
-            <div class="ds-bubble-text ds-bubble-text-stroke">1</div>
-            <h3 class="ds-subhead">Hook fast</h3>
-            <p class="ds-body-text">Open like a creator, not a commercial. Lead with the payoff, the problem, or the part people want to steal for their own save folder.</p>
+          <article class="ds-feature ds-stack">
+            <span class="ds-feature-mark" aria-hidden="true"></span>
+            <h3 class="ds-subhead">Stop polishing</h3>
+            <p class="ds-body-text">
+              Fast, loose, and real beats over-produced. You are not making a TV spot. You are making something people might actually finish.
+            </p>
           </article>
-          <article class="ds-surface ds-stack">
-            <div class="ds-bubble-text ds-bubble-text-stroke">2</div>
-            <h3 class="ds-subhead">Keep it native</h3>
-            <p class="ds-body-text">Use real voice, real pacing, and real personality. Your brand can look sharp without sounding rehearsed.</p>
+          <article class="ds-surface-light ds-stack ds-rrect-mixed">
+            <div class="ds-bubble-text ds-bubble-text-razz">Make it feel native</div>
+            <h3 class="ds-subhead">Start with the scroll</h3>
+            <p class="ds-body-text">
+              One sharp opener. One product truth. One clear ask. That is enough to learn what gets the watch and what gets the tap.
+            </p>
           </article>
-          <article class="ds-surface ds-stack">
-            <div class="ds-bubble-text ds-bubble-text-stroke">3</div>
-            <h3 class="ds-subhead">Point to action</h3>
-            <p class="ds-body-text">Give the scroll somewhere to go. Shop it. Book it. Try it. One video. One message. One next click.</p>
+          <article class="ds-feature ds-stack">
+            <div class="ds-bubble-text ds-bubble-text-stroke">Keep it moving</div>
+            <h3 class="ds-subhead">Show the payoff early</h3>
+            <p class="ds-body-text">
+              Creator energy wins attention. Put the product to work quickly and make the value obvious before people have time to guess.
+            </p>
           </article>
         </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section id="proof" class="ds-section ds-bg ds-stat-band">
-      <div class="ds-container ds-stack">
-        <div class="ds-chip">Proof</div>
-        <div class="ds-grid-2">
-          <div class="ds-stack">
-            <h2 class="ds-h2">Results look better when the creative looks like it belongs.</h2>
-            <p class="ds-lead">The win is not “more content.” The win is content people actually watch, remember, and act on.</p>
-            <div class="ds-bubble-cluster" aria-hidden="true">
-              <span class="ds-bubble-primary"></span>
-              <span class="ds-bubble-secondary"></span>
-              <span class="ds-bubble-ink"></span>
-            </div>
-          </div>
+  <section class="ds-section ds-bg-primary" id="how-it-works">
+    <div class="ds-container ds-stack">
+      <div class="ds-chip">How it works</div>
+      <h2 class="ds-h2">Make the scroll do some work.</h2>
+      <p class="ds-lead">
+        Three moves. No ad voice. Just creative that gets seen, gets remembered, and gets people moving.
+      </p>
+      <ol class="ds-steps ds-grid-3">
+        <li class="ds-step ds-surface-light ds-stack ds-rrect-mixed">
+          <div class="ds-step-num">1</div>
+          <div class="ds-bubble-text ds-bubble-text-razz">Start here</div>
+          <h3 class="ds-subhead">Hook fast</h3>
+          <p class="ds-body-text">
+            Open with the problem, the payoff, or the thing people want to steal. The first second does the heavy lifting, so make that second count.
+          </p>
+          <p class="ds-caption">This is the featured move for a reason.</p>
+        </li>
+        <li class="ds-step ds-surface ds-stack">
+          <div class="ds-step-num">2</div>
+          <div class="ds-bubble-text ds-bubble-text-stroke">Then show it</div>
+          <h3 class="ds-subhead">Demo beats description</h3>
+          <p class="ds-body-text">
+            Put the product in motion. Let people see where it fits, what it fixes, or why it is better before they have time to scroll away.
+          </p>
+        </li>
+        <li class="ds-step ds-surface ds-stack">
+          <div class="ds-step-num">3</div>
+          <h3 class="ds-subhead">Ask clean</h3>
+          <p class="ds-body-text">
+            Tell viewers what to do next. Shop it. Book it. Try it. Keep the ask simple enough to hit before the next swipe wins.
+          </p>
+        </li>
+      </ol>
+      <div class="ds-statement">
+        <p class="ds-h2">Don’t make a campaign. Make a reason to keep watching.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="ds-stat-band ds-bg" id="proof">
+    <div class="ds-container ds-stack">
+      <div class="ds-chip">Proof</div>
+      <div class="ds-grid-2">
+        <div class="ds-stack">
+          <p class="ds-bignum">60</p>
+          <p class="ds-subhead">seconds can sell a lot.</p>
+          <p class="ds-body-text">
+            A short video can show the product, land the payoff, and get the click before attention disappears. That is the game.
+          </p>
+        </div>
+        <div class="ds-stack">
+          <h2 class="ds-h2">Native-feeling creative usually goes farther.</h2>
+          <p class="ds-body-text">
+            The brands that win here do not over-explain. They make sharper hooks, clearer demos, and cleaner calls to action that marketers can actually measure.
+          </p>
           <div class="ds-grid-3">
-            <article class="ds-surface ds-stack">
-              <p class="ds-h2">6s</p>
-              <p class="ds-body-text">to earn attention before a swipe. Native hooks give your message a real chance.</p>
+            <article class="ds-surface-light ds-stack">
+              <p class="ds-subhead">Better watch time</p>
+              <p class="ds-caption">People stay for the part that feels like TikTok.</p>
             </article>
-            <article class="ds-surface ds-stack">
-              <p class="ds-h2">1</p>
-              <p class="ds-body-text">clear action per video keeps the story tight and the conversion path easy to follow.</p>
+            <article class="ds-feature ds-stack">
+              <p class="ds-subhead">Cleaner clicks</p>
+              <p class="ds-caption">The product shows up before interest drops off.</p>
             </article>
-            <article class="ds-surface ds-stack">
-              <p class="ds-h2">More</p>
-              <p class="ds-body-text">saves, shares, clicks, and customer intent when the creative feels made for TikTok, not pasted onto it.</p>
+            <article class="ds-surface-light ds-stack ds-rrect-mixed">
+              <p class="ds-subhead">Stronger odds</p>
+              <p class="ds-caption">Your next post has a better shot at paying for itself.</p>
             </article>
           </div>
         </div>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section id="cta" class="ds-section ds-bg-light ds-cta-band">
-      <div class="ds-container">
-        <div class="ds-cta-inner ds-stack">
+  <section class="ds-cta-band ds-bg-light" id="cta">
+    <div class="ds-container">
+      <div class="ds-cta-inner">
+        <div class="ds-stack">
           <div class="ds-chip">Ready when you are</div>
-          <h2 class="ds-h2">Make your next <span class="ds-emph">customer,</span> not just your next video.</h2>
-          <p class="ds-lead">Bring the creator energy. Keep the business goal. Start making TikToks that move people from scroll to action.</p>
-          <div class="ds-actions">
-            <a href="#" class="ds-btn ds-btn-primary">Get started with TikTok for Business</a>
-            <a href="#problem" class="ds-link">Need the case first?</a>
-          </div>
+          <h2 class="ds-h2">Make TikToks. Make <span class="ds-emph">sales.</span></h2>
+          <p class="ds-lead">
+            The feed is moving. Your next customer is already in it. Show up with something worth stopping for, then make the click easy.
+          </p>
+        </div>
+        <div class="ds-actions">
+          <a class="ds-btn ds-btn-primary" href="#">Start making TikToks</a>
+          <a class="ds-btn ds-btn-ghost" href="#">Talk to sales</a>
         </div>
       </div>
-    </section>
-  </main>
+    </div>
+  </section>
 </body>
 </html>

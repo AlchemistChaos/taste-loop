@@ -578,10 +578,13 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
     ? `\nLEARNED RULE you MUST apply (from memory, non-negotiable): ${lesson}\n`
     : "";
 
-  // Numbered, non-negotiable fix-rules block (the raw critique trace findings).
-  // These bypass the lossy distill and go straight into the build prompt.
-  const numberedRules = fixRules.length
-    ? fixRules.map((r, i) => `${i + 1}. ${r}`).join("\n")
+  // Numbered fix-rules block (recalled traces + this turn's critique findings). CAPPED to the
+  // newest ~12 so the block can't balloon to the 25k "wall" the audit found (the model can't
+  // weight 49 competing rules). The orchestrator already caps recalled to ~8; this is the backstop.
+  const cappedFixRules = Array.isArray(fixRules) ? fixRules.slice(0, 12) : [];
+  const numberedRules = cappedFixRules.length
+    ? cappedFixRules.map((r, i) => `${i + 1}. ${r}`).join("\n") +
+      (fixRules.length > 12 ? `\n(+${fixRules.length - 12} older fixes — keep avoiding those too.)` : "")
     : "";
 
   // BRAND VOICE & COPY — feed the enriched brandspec voice so headlines/body are
@@ -705,96 +708,62 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
       ? numberedRules
       : `(no specific fix-rules this turn — polish the page within the BRAND DON'Ts above.)`;
 
+    // REVISE — the corrections are the WHOLE point of this turn, so they lead AND sit right before
+    // the output. Fresh-build craft (aspiration / art-direction / keyless tour / full dsContract) is
+    // STRIPPED — the prior page already embodies it; re-stating it invites a churn-rebuild.
     prompt =
-      `You are a senior front-end designer REVISING an existing on-brand marketing page. ` +
-      `Below is the page's CURRENT HTML, followed by a NUMBERED list of concrete fix-rules ` +
-      `(real critique findings). Apply EVERY rule and return the ` +
-      `CORRECTED, COMPLETE HTML document.\n` +
-      `GOAL: ${goal}\n` +
-      `BRAND: tone ${tone}; audience ${brand.audience || "general"}.\n` +
-      `BRAND DON'Ts (must obey): ${JSON.stringify(donts)}.\n` +
-      brandVoice +
-      aspiration +
-      (copyHint ? `\nTHIS TURN'S DIRECTION (improve toward this; keep what already works):\n${copyHint}\n` : "") +
-      rule +
-      `\nFIX-RULES — apply ALL of them, non-negotiable:\n${rulesBlock}\n` +
-      `\nRevision requirements:\n` +
-      (surgical
-        ? `- TARGETED EDIT: APPLY the rules above — make the primary fix AND remove EVERY flaw the rules name, in ` +
-          `whatever section it lives (a recurring defect like a stray mark or a dead hero void MUST actually ` +
-          `disappear, not be preserved). Keep the page's overall structure and any section the rules DON'T mention ` +
-          `stable — do NOT rebuild from scratch, re-order sections, or churn good copy — but you ARE free to edit ` +
-          `the specific elements the rules flag, even across sections.\n`
-        : hasRules
-        ? `- Apply every numbered rule above to THIS page (e.g. add a color where a rule ` +
-          `says it is missing, remove a pattern a rule forbids, sharpen tone/copy where a rule demands it).\n`
-        : `- Keep the page faithful to its current design; only tighten obvious quality issues you can see.\n`) +
-      `- Keep the page's overall structure and its ${sectionCount} sections — improve, don't rebuild from scratch.\n` +
-      `- Keep real, on-brand marketing copy (NO lorem, NO placeholder text). Use flat brand-color blocks ` +
-      `only — NO gradients, no drop shadows.\n` +
-      briefDirectives +
-      dsContract +
-      `\nDESIGN TOKENS (use these exact values):\n${tokenSummary}\n` +
-      `\nCURRENT PAGE HTML (revise this):\n<<<HTML\n${prior}\nHTML\n` +
-      `\nOUTPUT ONLY the corrected HTML document, starting with <!DOCTYPE html> and ending with </html>. ` +
-      `No commentary, no explanations, no markdown code fences. ` +
-      `Do NOT run any shell commands or read/write files — just produce the corrected HTML in your reply. ` +
-      `You do NOT need to include the design-system <style> yourself; it will be re-inlined for you.`;
-  } else {
-    // FRESH BUILD. If concrete fix-rules were supplied (verbatim recalled rules +
-    // this turn's critique mustFix), fold them into the prompt as an explicit,
-    // non-negotiable block (in addition to any lesson).
-    const rulesDirective = numberedRules
-      ? `\nApply these concrete fix-rules (verbatim recalled fixes + this turn's critique findings, non-negotiable):\n${numberedRules}\n`
-      : "";
+`You are a senior brand designer CORRECTING an existing on-brand marketing page. The numbered FIX-RULES below are the ONLY reason this turn exists — applying every one is the whole job.
 
-    // Build on the design system: tell Codex to consume the (already-inlined) CSS
-    // variables + .ds-* classes + the token palette. We INLINE the stylesheet
-    // ourselves so styling never depends on a CDN.
+${surgical
+  ? "MODE — TARGETED: fix exactly what the rules name; leave everything else stable. Do NOT re-order sections, rebuild from scratch, or churn good copy. But a named defect (stray mark, dead void, wrong-color text, cramped section) MUST visibly DISAPPEAR, in whatever section it lives."
+  : "MODE — FULL: apply every rule; you may edit across sections. Keep the page's overall structure + real copy — improve, don't rebuild from scratch."}
+
+FIX-RULES — for EACH one, change the element and confirm the defect is GONE in the final HTML (not merely acknowledged). A recurring defect must DISAPPEAR, not be preserved:
+${rulesBlock}
+
+GUARDRAILS — do NOT reintroduce a violation while fixing: FLAT only (no gradients/shadows); ONE brand color per composition + black/white; Splash is a field/border ONLY, never on text; compose only from existing .ds-* classes + var(--*) tokens (no new classes, no <style> block, no inline style=""); real copy, no placeholder; obey BRAND DON'Ts ${JSON.stringify(donts)}. Keep all copy in the brand voice.
+
+DESIGN TOKENS (exact values):
+${tokenSummary}
+
+CURRENT PAGE HTML (correct THIS — keep what already works):
+<<<HTML
+${prior}
+HTML
+
+OUTPUT ONLY the corrected HTML document, from <!DOCTYPE html> to </html>. No commentary, no markdown fences, no shell commands. The design-system <style> is re-inlined for you — do not include it.`;
+  } else {
+    // FRESH BUILD — slimmed, de-duplicated, section-job prompt (from the 2-agent rewrite).
+    // Every rule stated ONCE; section-by-section jobs; the brand copy engine drives the hero;
+    // fix-rules (if any) are recency-anchored + verify-gated right before the output contract.
     prompt =
-      `You are a senior front-end designer building a real, on-brand marketing website ` +
-      `on top of an EXISTING design system.\n` +
-      `GOAL: ${goal}\n` +
-      `BRAND: tone ${tone}; audience ${brand.audience || "general"}.\n` +
-      `BRAND DON'Ts (must obey): ${JSON.stringify(donts)}.\n` +
-      brandVoice +
-      aspiration +
-      rule +
-      rulesDirective +
-      (copyHint ? `Copy direction: ${copyHint}\n` : "") +
-      briefDirectives +
-      `\nDESIGN TOKENS (use these exact values):\n${tokenSummary}\n` +
-      dsContract +
-      // §3c — concrete, component-anchored ART DIRECTION (replaces the vague
-      // "MUST VISIBLY be on-brand" line). The brand DON'Ts above still apply.
-      `\nART DIRECTION (non-negotiable): the page is BOLD, flat, editorial. Alternate FULL-BLEED color-blocked ` +
-      `panels — Razzmatazz, black, and white in sequence (exactly ONE brand color per panel; Splash only as a ` +
-      `full-bleed accent band or figure border, NEVER on text). The hero headline is OVERSIZED and breaks the ` +
-      `grid, with exactly ONE word wrapped in .ds-emph (Razzmatazz). Emphasis marks (.ds-mark) and dot patterns ` +
-      `(.ds-pattern) are OPTIONAL accents — use them ONLY if they sit tight and intentional against the lockup; a mark ` +
-      `that floats free, detaches, or clips is WORSE than none, so OMIT it rather than leave a stray glyph. Do NOT ` +
-      `force marks or patterns onto every build. NOTE: .ds-bubble-cluster is DECORATIVE overlapping ` +
-      `CIRCLES ONLY (it must contain .ds-bubble-primary/-secondary/-ink circles, NEVER word-bubbles or text) and is NOT ` +
-      `for the hero; .ds-bubble-text pills are the standalone word/CTA holders. Every image is a real .ds-figure media frame (rounded 25%/50%, optional ` +
-      `10° rotation) — NEVER a bare rectangle or grey placeholder. Generous 96px/128px section padding. NO ` +
-      `gradients, NO drop shadows; create depth with layered flat shapes only.\n` +
-      `\nTYPE IS THE HERO (there are NO photographs — type carries the page): make the H1 a MEGA .ds-display ` +
-      `headline (ultra-tight leading, breaks the grid — the headline IS the artwork, not an afterthought). You may ` +
-      `outline ONE word with .ds-text-outline for filled+hollow contrast. A flat, text-only page must read as BOLD ` +
-      `and distinctive, NEVER as a clean-but-generic landing page.\n` +
-      `COMPOSITION — vary it; do NOT stack identical centered blocks. Use at least ONE .ds-grid-asym asymmetric ` +
-      `split, ONE .ds-statement full-bleed type moment, ONE .ds-quote editorial pull-quote (text-based credibility), ` +
-      `and a proof/stat section anchored by a .ds-bignum oversized number. Alternate alignment and rhythm.\n` +
-      `COPY — every line is SHARP and SPECIFIC: provocative, native, concrete (a real number, a real outcome). ` +
-      `Headlines punch in under 8 words. BAN filler/generic marketing ("built for discovery", "best-in-class", ` +
-      `"unlock growth", "supercharge") — write like a creator, not a brand deck.\n` +
-      `\nBuild a single self-contained responsive HTML5 page with EXACTLY ${sectionCount} sections ` +
-      `(${sections.join(", ")}). Write real, on-brand marketing copy (NO lorem, NO placeholder text). ` +
-      `Use flat brand-color blocks only — no gradients, no drop shadows.\n` +
-      `OUTPUT ONLY the HTML document, starting with <!DOCTYPE html> and ending with </html>. ` +
-      `No commentary, no explanations, no markdown code fences. ` +
-      `Do NOT run any shell commands or read/write files — just produce the HTML in your reply. ` +
-      `You do NOT need to include the design-system <style> yourself; it will be inlined for you.`;
+`You are a senior brand designer building ONE self-contained marketing homepage for ${goal}, on top of a design system that is ALREADY INLINED for you (CSS variables + .ds-* classes). This is a KEYLESS page — there are NO photographs. TYPE is the artwork.
+
+Your job is not to fill a template. Make ONE confident, unmistakable move that embodies "${brand.tagline || "the brand at its best"}" — its energy, attitude, editorial boldness — and build the page around it. A flawless-but-safe page scores ~75; a page with a real bold move and sharp copy scores 90+. Reach for the 90.
+${brandVoice}
+THE PAGE — build EXACTLY ${sectionCount} sections, in order: ${sections.join(", ")}. Give each section a clear JOB and let a NAMED .ds-* component carry it (drop the skeleton in, fill real copy — never rebuild it from raw <div>s). Alternate full-bleed color fields (black → white → Razzmatazz) so the page has rhythm; never stack two identical centered blocks in a row.
+- HERO: a type-led opening. Use .ds-hero with the .ds-hero--type modifier (full-bleed single column, NO media half) and a MEGA .ds-display headline built on the copy engine "${brand.copyPattern || "Don't Make Ads. Make ___."}" — the headline IS the visual, with ONE word in .ds-emph. Add a subhead + two pill CTAs. This is the page's bold move; spend your best copy here.
+- MIDDLE sections (problem / how-it-works / proof): give each ONE distinct treatment so they don't read the same — a .ds-statement full-bleed type moment for the core tension; a proof section anchored by an oversized .ds-bignum (one real number) or a .ds-stat-band; a how-it-works from .ds-steps + .ds-grid-3, OR features from .ds-feature-grid + .ds-grid-3; and at least one .ds-grid-asym asymmetric split and/or one .ds-quote (+ .ds-quote-attr) pull-quote for credibility. Vary alignment and which component leads. Fill every card/step with real copy — no bare text floating in a band.
+- CLOSE: .ds-cta-band > .ds-container > .ds-cta-inner exactly (no wrapping frame). Oversized headline, one pill CTA.
+
+TYPE CARRIES THE PAGE (no images): with no photography, type is the visual system. Reach for .ds-display (mega, ultra-tight headline), .ds-statement (full-bleed all-type panel), .ds-text-outline (outline ONE word — a single word, never a whole headline), .ds-quote, and .ds-bignum (oversized numeral anchoring a stat). A flat text-only page must read as BOLD and editorial — never as a clean-but-generic landing page. Optional accents — .ds-mark glyphs, .ds-pattern dot textures, .ds-bubble-text pills — only when they sit tight and intentional. Don't force an accent onto every section.
+
+BUILD WITH THE SYSTEM: put class="ds-body" on <body> and style everything with the var(--color-*) / var(--font-*) / var(--space-*) tokens — never hardcode hex or font stacks. Use generous section padding (96–128px). Compose ONLY from these classes (invent no new .ds-* names): foundations (.ds-section/.ds-container/.ds-stack, .ds-h1/.ds-h2/.ds-subhead/.ds-lead/.ds-body-text/.ds-caption, .ds-emph + .ds-emph-ink, .ds-bg/.ds-bg-light/.ds-bg-primary/.ds-bg-secondary, .ds-btn + variants, .ds-actions, .ds-chip eyebrows, .ds-link); components (.ds-hero[+--type], .ds-feature-grid, .ds-stat-band, .ds-steps, .ds-cta-band, .ds-grid-2/.ds-grid-3/.ds-grid-asym, .ds-figure[-25/-50/-bordered/-rotate-10]); editorial type (.ds-display, .ds-statement, .ds-text-outline, .ds-quote, .ds-bignum); accents (.ds-mark[-cross/-chevron/-bracket], .ds-pattern, .ds-bubble-text, .ds-bubble-cluster).
+
+DESIGN TOKENS (exact values):
+${tokenSummary}
+RULES — obey every one (this is the whole list; each stated ONCE):
+1. FLAT only. No gradients, no drop shadows, no effects — build depth from layered flat color blocks.
+2. ONE brand color per composition, paired with black or white; never two brand colors fighting in one composition; never invent a color; grey is for borders/muted captions only, never a composition background.
+3. Razzmatazz (#FE2C55) emphasizes text; Splash (#25F4EE) is a full-bleed field or figure border ONLY and NEVER touches text (on a Splash field, text is black). Black (.ds-emph-ink) is also a legal text emphasis. Two colors max in any text treatment.
+4. Type: no all-caps/all-lowercase headlines; never set body copy bold; keep size steps clearly distinct (big headings).
+5. Invent NO imagery: no fake <svg>/<rect> art, no icons, no logo marks, no placeholder bars — the wordmark is TEXT. Render only imagery explicitly provided; any image goes in a .ds-figure, never a bare rectangle.
+6. WHEN IN DOUBT, OMIT. A floating, detached, or clipped accent is WORSE than none — leave it out. No dead voids, no empty bands.
+7. Real marketing copy only — no lorem, no placeholder. Headlines under 8 words, concrete, native; banned filler: "built for discovery", "best-in-class", "unlock growth", "supercharge", "share of voice".
+8. Stay inside the system: no Tailwind/Bootstrap/CDN font, no your own <style> block, no inline style="" attributes. The inlined design system is the only stylesheet.
+9. BRAND DON'Ts (must obey): ${JSON.stringify(donts)}.
+${briefDirectives}${numberedRules ? `\nBEFORE YOU OUTPUT — apply EVERY fix below to THIS build. These are real critique findings; for each, make the named defect visibly DISAPPEAR in the final HTML (not merely acknowledged):\n${numberedRules}\n` : ""}
+OUTPUT ONLY the HTML document, from <!DOCTYPE html> to </html>. No commentary, no markdown fences, no shell commands. The design-system <style> is inlined for you — do not include it.`;
   }
 
   // gen-loop caller: 0 retries so a slow build fails fast (Phase 0.1).
