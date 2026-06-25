@@ -1,9 +1,9 @@
 # TasteLoop — Design Doc (current architecture)
 
-> **Status:** living doc, rewritten 2026-06-25 to match the code as it actually is.
-> Everything earlier in this file's history is superseded. If something here disagrees
-> with an older doc (`tasteloop-improvement-plan.md`, `CONTRACTS.md`, `tasteloop-review.md`,
-> `tasteloop-demo-plan.md`, `tasteloop-design-doc.original.md`), **this file wins** — those are historical.
+> **Status:** living doc, rewritten 2026-06-25 to match the code as it actually is. This is the
+> **single source of truth** for the architecture — all the older planning/design/contract docs
+> (improvement-plan, CONTRACTS, review, demo-plan, BUILD_STATUS, COMPONENTS, COGNEE_WORKING, the
+> `.original`) were **deleted** because they were stale. If you need their history, it's in git.
 
 ---
 
