@@ -40,7 +40,6 @@
 // Frozen imports (coded to these signatures; never changed here):
 import { planTeam } from "./team.mjs";
 import { runAgent, reviseHtml } from "./skills.mjs";
-import { judgeSite } from "./judge.mjs";
 import { codexCritique, codexBuildSite, codexRun, designInventory } from "./codex.mjs";
 import { renderShot } from "./render.mjs";
 import { chat, chatJSON } from "./ollama.mjs";
@@ -560,7 +559,6 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
   let tracesCount = 0;
   let improvements = 0;
   let lessonsCount = 0;
-  let bestScore = 0;
   // The page CARRIED across turns. Turn 0 builds it fresh; every later turn IMPROVES this
   // exact page (in-run self-improvement) instead of rebuilding from scratch. BOTH pages carry
   // their own; the only difference is the memory page's improvements are guided by recall.
@@ -569,9 +567,6 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
   // real turn-by-turn axis — NOT the per-agent `turns` cap counter below (which is 1:1 with
   // agents spawned). The HUD "Turns" tile reports THIS.
   let gensRun = 0;
-  // The most recent per-gen judged score for THIS page. Feeds the prompt-diff
-  // panel's scoreBefore (the prior gen's score for the page that just upskilled).
-  let lastGenScore = null;
   // Per-agent credit carried to the NEXT turn (2.4): { role -> {flaw, attributedTo} }.
   // The orchestrator computes credit AFTER this turn's critique; planTeam attaches it
   // to next turn's spawn so the per-agent rows mean something + the agent's brief is
@@ -675,7 +670,7 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
           lessonId: (d.lessonId != null) ? String(d.lessonId) : lessonId(lessons[0], 0),
           lessonText: (typeof d.lessonText === "string" && d.lessonText) ? d.lessonText : lessonStatement(lessons[0]),
           instructionDiff: { before: diff.before, after: diff.after },
-          scoreBefore: typeof lastGenScore === "number" ? lastGenScore : null,
+          scoreBefore: null,
           scoreAfter: null, // filled after judging this gen
         };
       } else {
@@ -907,6 +902,10 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     //   EMPTY recalled rules (only this turn's findings). The no-memory page revises
     //   on this turn's findings only. So the win is NOT "two attempts."
     // ===================================================================
+    // resolvedThisTurn: how many of this turn's flaws the revise VERIFIABLY fixed (resolved-proof
+    // below). With the judge removed, THIS is the per-turn "did it improve?" signal — it drives the
+    // Improve counter + Cognee feedback, and (memory only) the verified traces.
+    let resolvedThisTurn = 0;
     {
       // Turn 2+ (surgicalTurn): apply ONLY the audited gap fix (the upgrade) — one small,
       // targeted change, keep the rest of the page intact. Turns 0-1: whole-page refine
@@ -972,10 +971,10 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
           });
         }
 
-        // ---- RESOLVED-PROOF (A.4 — memory page only). Render the AFTER shot and
-        // ask the vision critique whether each named flaw is still present.
-        // resolved = present-in-before AND absent-in-after. Emit trace.resolved.
-        if (isMemory && ctx.html !== builtHtml) {
+        // ---- RESOLVED-PROOF (the per-turn signal — runs on BOTH pages now the judge is gone).
+        // Render the AFTER shot and ask the vision critique whether each named flaw is still
+        // present. resolved = present-before AND absent-after. Drives Improve + feedback.
+        if (ctx.html !== builtHtml) {
           let afterShot = "";
           try { afterShot = await renderShot(ctx.html, preShotPath(page, gen, "after")); } catch { afterShot = ""; }
           let afterFlaws = new Set();
@@ -987,6 +986,7 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
           const verifiedTraces = [];
           for (const f of findingObjs) {
             const resolved = !afterFlaws.has(f.flaw.toLowerCase()); // present-before AND absent-after
+            if (resolved) resolvedThisTurn += 1;
             gatedEmit({
               type: "trace.resolved",
               flaw: f.flaw,
@@ -1001,7 +1001,7 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
             // per run (dedup). Store it as a FORWARD, actionable rule so next turn's build
             // pre-empts the fix BEFORE its own critique runs — that's how the memory page
             // pulls ahead of the flat no-memory page. Not traced under ablation.
-            if (resolved && !ablateMemory) {
+            if (resolved && isMemory && !ablateMemory) {
               const key = f.flaw.trim().toLowerCase();
               if (key && !tracedKeys.has(key)) {
                 tracedKeys.add(key);
@@ -1030,30 +1030,15 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     }
 
     // ===================================================================
-    // SPINE STEP 6 — JUDGE [BOTH] (the immutable two-axis anchor; §4, §9.6).
-    //   judgeSite returns {quality, brandAdherence, score, ...}; the blend/cap is
-    //   LOCKED in judge.mjs. We emit the PER-GEN score (NOT bestScore) so the chart
-    //   can show "rising vs flat". bestScore is kept ONLY for the headline total.
+    // (JUDGE REMOVED) — no per-turn score. The loop is purely CRITIQUE-driven: the critique
+    // (STEP 3) decides what to fix and the revise applies it; the RESOLVED-PROOF above is the
+    // "did it improve?" signal. We still emit a per-gen marker so the UI's Turns tile advances.
     // ===================================================================
-    const judged = await judgeSite({ brand, html: ctx.html, goal });
-    const score = judged.score;
-    const quality = judged.quality;
-    const brandAdherence = judged.brandAdherence;
-    gatedEmit({
-      type: "team.judged",
-      score,
-      category: judged.category,
-      reasoning: judged.reasoning,
-      quality,
-      brandAdherence,
-    });
-    if (score > bestScore) bestScore = score;
-    // PER-GEN score on score.updated (H2) — NOT bestScore. x=gen, y=this gen's score.
-    gatedEmit({ type: "score.updated", gen, page, quality, brandAdherence, score });
+    gatedEmit({ type: "score.updated", gen, page });
 
-    // ---- IMPROVEMENTS (page-symmetric, MED/LOW): a turn where THIS page's score
-    // rose vs ITS OWN prior turn. Computed identically for BOTH pages.
-    if (typeof lastGenScore === "number" && score > lastGenScore) {
+    // ---- IMPROVEMENTS: a turn where the revise VERIFIABLY fixed >=1 flaw (resolved-proof).
+    // Replaces the old "score rose" signal. Computed identically for BOTH pages.
+    if (resolvedThisTurn > 0) {
       improvements += 1;
     }
 
@@ -1061,11 +1046,11 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     // upgrade we pursued worked → store it as a "winning direction" so memory accumulates
     // what ADDS quality (not just what to avoid). This is the additive counterpart to the
     // preventive "do not reintroduce X" traces. Memory-only, deduped, never under ablation.
-    if (isMemory && !ablateMemory && upgrade && typeof lastGenScore === "number" && score > lastGenScore) {
+    if (isMemory && !ablateMemory && upgrade && resolvedThisTurn > 0) {
       const key = "upg:" + upgrade.trim().toLowerCase();
       if (!tracedKeys.has(key)) {
         tracedKeys.add(key);
-        const ruleText = `Pursue this winning direction (it raised the score last time): ${upgrade}`;
+        const ruleText = `Pursue this winning direction (its fixes verifiably stuck): ${upgrade}`;
         try {
           await memory.writeTraces(sessionId, [{ role: "elevate", finding: ruleText, severity: "high", nodeSet: [brandToken(brand), "elevate", "high"] }]);
           tracesCount += 1;
@@ -1081,10 +1066,10 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     //   qa_id from this turn's recall; applied:false (skipped) when qa_id is null.
     // ===================================================================
     if (isMemory && !ablateMemory && typeof memory.feedback === "function" && qaId) {
-      const delta = (typeof lastGenScore === "number") ? (score - lastGenScore) : 0;
-      const feedbackScore = delta > 0 ? 5 : (delta < 0 ? 1 : 3);
+      // Feedback signal = the RESOLVED-PROOF (did this turn's fixes stick?), not a score.
+      const feedbackScore = resolvedThisTurn > 0 ? 5 : 3;
       const feedbackText = (findingObjs[0] && findingObjs[0].flaw) ||
-        (recalledRules[0]) || "turn-over-turn quality delta";
+        (recalledRules[0]) || "turn fix-resolution signal";
       try {
         await memory.feedback(sessionId, { qa_id: qaId, feedbackText, feedbackScore });
       } catch { /* feedback best-effort */ }
@@ -1121,15 +1106,12 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     // so scoreAfter (this gen's score) — and the resulting delta — are real. The
     // UI pops the prompt-diff panel on this event (graceful no-op on thin shapes).
     if (pendingUpskill) {
-      pendingUpskill.scoreAfter = score;
+      pendingUpskill.scoreAfter = null; // no score (judge removed)
       gatedEmit(pendingUpskill);
       pendingUpskill = null;
     }
 
-    // Remember THIS gen's score so the NEXT gen can compute the page-symmetric
-    // improvement + the upskill panel's scoreBefore.
-    lastGenScore = score;
-    // CARRY THE PAGE FORWARD: next turn IMPROVES this judged page instead of rebuilding
+    // CARRY THE PAGE FORWARD: next turn IMPROVES this page instead of rebuilding
     // from scratch. This is the in-run self-improvement compounding (both pages).
     if (typeof ctx.html === "string" && ctx.html.trim()) pageHtml = ctx.html;
     gensRun += 1; // this generation completed
@@ -1143,12 +1125,10 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
       traces: tracesCount,
       improvements,
       lessons: lessonsCount,
-      score: bestScore,
     },
   });
 
   return {
-    bestScore,
     turns: gensRun,
     agentsSpawned,
     traces: tracesCount,
@@ -1295,12 +1275,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       log(ctxB.brief.layoutDirection === "single-column" && ctxB.brief.typeScale === "1.25 modular", "brief: visual/typographer slots filled");
     }
 
-    // ---- score.updated emits the PER-GEN score (H2), not bestScore ----
+    // ---- score.updated is now just a PER-GEN MARKER {gen, page} (the JUDGE is removed; no
+    //      score). It only advances the UI Turns tile. ----
     {
-      // Mirror the orchestrator's judge emit: it sends { gen, page, quality, brandAdherence, score }
-      // where score is THIS gen's judged value. We assert the SHAPE here (deterministic).
-      const ev = { type: "score.updated", gen: 1, page: "memory", quality: 80, brandAdherence: 70, score: 76 };
-      log(ev.score === 76 && typeof ev.gen === "number" && "quality" in ev && "brandAdherence" in ev, "score.updated: per-gen score + quality + brandAdherence + gen (NOT bestScore)");
+      const ev = { type: "score.updated", gen: 1, page: "memory" };
+      log(typeof ev.gen === "number" && ev.page === "memory" && !("score" in ev),
+        "score.updated: per-gen marker {gen, page} (judge removed — no score)");
     }
 
     // ---- CREDIT (§2.1/§2.5): planTeam is CALLED with `credit: creditByRole`, and that

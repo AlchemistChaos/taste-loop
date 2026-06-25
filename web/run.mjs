@@ -100,7 +100,7 @@ async function main() {
 
   const finals = events.filter((e) => e.type === "run.finished");
   for (const f of finals) {
-    console.log(`  ${f.page}: score=${f.totals?.score} traces=${f.totals?.traces} improvements=${f.totals?.improvements} lessons=${f.totals?.lessons}`);
+    console.log(`  ${f.page}: traces=${f.totals?.traces} improvements=${f.totals?.improvements} lessons=${f.totals?.lessons}`);
   }
   console.log(`\nDone. ${events.length} events -> ${OUT}`);
 }
