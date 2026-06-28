@@ -321,6 +321,11 @@
     refs.iframeEmpty.classList.add("hidden");
   }
 
+  function htmlRefForIframe(ev) {
+    if (!ev || ev.type !== "score.updated") return "";
+    return typeof ev.htmlRef === "string" ? ev.htmlRef : "";
+  }
+
   // -------- Upskill focus panel (the demo climax) --------
   // On a rich member.upskilled event we pop a centered panel showing the
   // v1 -> v2 prompt diff and the lesson that caused it. Gracefully no-ops on
@@ -858,6 +863,8 @@
         break;
       }
       case "score.updated": {
+        const keptHtmlRef = htmlRefForIframe(ev);
+        if (keptHtmlRef) setIframe(page, keptHtmlRef);
         // "Turns" tile = GENERATION count (the in-run improvement rounds). score.updated
         // fires once per gen per page at gen-end, so gen+1 = generations completed.
         if (typeof ev.gen === "number") {
@@ -1076,6 +1083,7 @@
   } else if (typeof globalThis !== "undefined") {
     globalThis.__TASTELOOP_APP_TEST__ = {
       mineTokens,
+      htmlRefForIframe,
       // score->y-pixel mapping for a 0..100 score within a 72px band (test-only;
       // the per-gen chart UI was removed, this pure helper is kept for app.smoke).
       yForScore: (s) => {

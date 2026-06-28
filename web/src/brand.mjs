@@ -46,10 +46,13 @@ const TOKENS_PATH = path.join(RUN_DIR, "tokens.json");
 const DESIGN_CSS_PATH = path.join(RUN_DIR, "design-system.css");
 const DESIGN_CSS_REL = "run/design-system.css";  // brand.designSystemPath
 
-// PDF location (env-overridable). Default = the user's brand book on the Desktop.
+// PDF location (env-overridable). Default = the repo-pinned brand book, with the
+// old Desktop location retained only as a fallback for legacy local setups.
 const PDF =
   process.env.BRAND_PDF ||
-  path.join(process.env.HOME || "", "Desktop", "TikTok_guidelines.pdf");
+  (existsSync(path.resolve(__dirname, "..", "..", "TikTok_guidelines.pdf"))
+    ? path.resolve(__dirname, "..", "..", "TikTok_guidelines.pdf")
+    : path.join(process.env.HOME || "", "Desktop", "TikTok_guidelines.pdf"));
 
 const PDFTOTEXT = process.env.PDFTOTEXT_BIN || "pdftotext";
 
@@ -365,6 +368,17 @@ export async function deconstructBrand() {
 
   // 4) cache (best-effort) and return the frozen public shape (+ rich system)
   try {
+    // If a richer hand-audited cache already exists, preserve those brand-book
+    // sections (tagline, photography, ad formats, logo rules, etc.) while
+    // refreshing the parser-derived core fields and provenance from the pinned
+    // PDF. The parser intentionally extracts the frozen legacy shape; it is not
+    // a full brand-book authoring pass.
+    if (existsSync(CACHE)) {
+      try {
+        const prior = JSON.parse(await readFile(CACHE, "utf8"));
+        if (prior && prior.colors && prior.fonts) spec = { ...prior, ...spec };
+      } catch { /* ignore corrupt prior cache */ }
+    }
     await mkdir(RUN_DIR, { recursive: true });
     await writeFile(CACHE, JSON.stringify(spec, null, 2));
   } catch { /* non-fatal */ }

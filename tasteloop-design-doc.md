@@ -24,7 +24,7 @@ The thesis: over a run, the **memory page should improve more / mature faster** 
 - Both pages use the **same model, same tools, same design system.** The **only** difference is that
   the memory page can **recall its own prior-turn traces**. (That's the independent variable.)
 - All critique/grading is **LLM vision** (no regex brand rules).
-- **Keyless:** no `OPENAI_API_KEY`, so **no images** — the page is type-led (type is the artwork).
+- The page is deliberately **type-led**: type, layout, color fields, and design-system components carry the visual system.
 
 ---
 
@@ -32,12 +32,12 @@ The thesis: over a run, the **memory page should improve more / mature faster** 
 
 | Role | What | How |
 |---|---|---|
-| **Builder + Critique** | **Codex `gpt-5.4`, `medium` effort** | `codex exec` CLI, **keyless** (your ChatGPT login). `web/src/codex.mjs` (`codexRun`, env `CODEX_MODEL`/`CODEX_EFFORT`). Builds BOTH pages. |
+| **Builder + Critique** | **Codex `gpt-5.4`, `high` effort, `fast` service tier** | `codex exec` CLI, **keyless** (your ChatGPT login). `web/src/codex.mjs` (`codexRun`, env `CODEX_MODEL`/`CODEX_EFFORT`/`CODEX_SERVICE_TIER`). Builds BOTH pages. |
 | **Cognee memory LLM** | Local **Ollama `glm-4.7-flash:latest`** | graph extraction + distill. `cognee.env`. |
 | **Embeddings** | Local **fastembed `BAAI/bge-small`** (384-dim) | Cognee retrieval. |
 | **Render** | Headless Google Chrome | `web/src/render.mjs` `renderShot(html, png)` — every page/critique grades the *rendered* PNG, not the HTML. |
 
-There is **no API key** in play; the build is free via the Codex CLI. Cognee runs from a venv
+The build runs through the Codex CLI. Cognee runs from a venv
 (`/tmp/cognee_smoke/venv`, cognee 1.2.1); persistence is redirected with `TASTELOOP_COGNEE_HOME`.
 
 ---
@@ -225,9 +225,8 @@ Known weakness (from the audit): distilled "lessons" are largely duplicates of r
   these.
 
 **Known limitations / next levers:**
-- **Imagery ceiling.** Keyless = no photos → text-only pages cap around ~80 ("strong editorial" at best).
-  The single biggest quality unlock would be real imagery (an API key for `gpt-image-1`, or stock/asset
-  images) — deliberately deferred.
+- **Composition ceiling.** The page depends on type, layout, and design-system components, so the biggest
+  quality unlock is stronger composition planning rather than generated media.
 - **Prompt size.** The fresh prompt is ~9k chars; `tokenSummary` (~2.5k) still dominates — slimming it
   is a clean follow-up.
 - **No regression safety-net.** No judge + no keep-better → a bad turn can stick until the next critique.
@@ -235,8 +234,7 @@ Known weakness (from the audit): distilled "lessons" are largely duplicates of r
   but a clear, repeatable "memory beats no-memory" result over a full run is still the open goal.
 
 **In flight at handoff:** a `GENS=12 MEM=cognee` run (`run_1782382754192`) testing all of the above —
-results were not yet reviewed. The model is still **gpt-5.4 medium** (a requested change to gpt-5.4 HIGH
-+ "fast" was interrupted and **not applied**).
+results were not yet reviewed. The model now defaults to **gpt-5.4 high** on the **fast** service tier.
 
 ---
 
@@ -246,7 +244,7 @@ results were not yet reviewed. The model is still **gpt-5.4 medium** (a requeste
 2. **Both pages share model + tools + design system.** The only memory-page-exclusive capability is
    **recall** (and the memory-side trace/feedback/distill). Don't strip quality tools from no-memory.
 3. **All-LLM critique** (vision) — no regex brand rules.
-4. **Keyless** (no images) unless a key is added. No invented placeholder imagery.
+4. **Type-led composition.** No generated media path; no invented placeholder media.
 5. **Master authors the roster per page** (not a fixed identical roster) — "let the agent decide what it
    needs." The independent variable is access-to-recalled-memory.
 6. **Cognee's LLM is local Ollama `glm-4.7-flash`**; Codex cannot be Cognee's LLM (Codex is a CLI actor,

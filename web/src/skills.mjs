@@ -50,18 +50,6 @@ import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// image.mjs is built in parallel; code to its frozen shape:
-//   generateImage({ prompt, brand }) -> { path, dataUri }
-// We import lazily inside the skill so this module still loads/smoke-tests even
-// if image.mjs hasn't landed yet (the smoke test stubs generateImage via deps).
-let _generateImage = null;
-async function loadGenerateImage() {
-  if (_generateImage) return _generateImage;
-  const mod = await import("./image.mjs");
-  _generateImage = mod.generateImage || mod.default;
-  return _generateImage;
-}
-
 // web/run/snapshots — htmlRef is returned RELATIVE to web/run (per the contract).
 // SNAP_DIR is env-overridable so tests can isolate to a temp dir and never
 // clobber the live run snapshots.
@@ -87,15 +75,13 @@ function snapDir() {
 // ---------------------------------------------------------------------------
 export const TOOL_PALETTE = Object.freeze({
   html_build:    "Build a full, self-contained marketing HTML page with Codex (gpt-5.4).",
-  svg_image:     "Generate an inline, flat, on-brand <svg> illustration with Codex.",
   cognee_recall: "Recall prior in-run traces from memory (Cognee) — memory page only.",
   cognee_trace:  "Write a finding to memory (Cognee) as an in-run trace — memory page only.",
   copywriter:    "Write bold, on-brand marketing copy (hero + page angle).",
   info_architect:"Order/define the page's sections for conversion.",
   typographer:   "Tune the type scale and font usage to the brand.",
   critique:      "Audit a page against the brand rules and list concrete findings (all-LLM vision when available).",
-  // Real, grantable capabilities — each EXECUTES against the brand/imagery/HTML.
-  image_gen:     "Generate a real on-brand hero image via gpt-image-1 (returns a data URI to embed); skipped without OPENAI_API_KEY.",
+  // Real, grantable capabilities — each EXECUTES against the brand/HTML.
   a11y_check:    "Run a real accessibility check on the HTML (alt text, button/aria).",
   contrast_check:"Parse colors in the HTML and flag low-contrast text/bg pairs.",
   copy_lint:     "Scan copy/HTML for banned business buzzwords (brand voice).",
@@ -146,14 +132,6 @@ function asLines(x) {
   return s ? [s] : [];
 }
 
-// Extract a single inline <svg>...</svg> from arbitrary model text. Returns "" if
-// none found (caller decides what to do — we never fabricate one).
-function extractSvg(text) {
-  if (!text) return "";
-  const m = String(text).match(/<svg[\s\S]*?<\/svg>/i);
-  return m ? m[0].trim() : "";
-}
-
 // Build the concrete user prompt an agent runs on: its master-authored
 // instructions, grounded with the live brand + goal + whatever the prior agents
 // threaded into ctx (recalled lessons, copy hints, prior html excerpt, findings).
@@ -168,6 +146,33 @@ function groundedPrompt(agent, deps, ctx) {
     `colors primary ${brand?.colors?.primary} accent ${brand?.colors?.accent}; ` +
     `DON'Ts ${JSON.stringify(brand?.dont || [])}.`
   );
+  if (brand?.tagline) parts.push(`TAGLINE / campaign spine: ${brand.tagline}`);
+  if (brand?.naming) parts.push(`NAMING: ${typeof brand.naming === "string" ? brand.naming : JSON.stringify(brand.naming)}`);
+  if (brand?.copyPattern) parts.push(`COPY PATTERN: ${brand.copyPattern}`);
+  if (Array.isArray(brand?.copyExamples) && brand.copyExamples.length) {
+    parts.push(`COPY EXAMPLES: ${brand.copyExamples.slice(0, 5).join(" | ")}`);
+  } else if (brand?.copyExamples && typeof brand.copyExamples === "object") {
+    const examples = [
+      ...(Array.isArray(brand.copyExamples.do) ? brand.copyExamples.do.slice(0, 3) : []),
+      ...(Array.isArray(brand.copyExamples.dont) ? brand.copyExamples.dont.slice(0, 2).map((x) => `Avoid: ${x}`) : []),
+    ];
+    if (examples.length) parts.push(`COPY EXAMPLES: ${examples.join(" | ")}`);
+  }
+  if (brand?.emphasisRule) parts.push(`EMPHASIS RULE: ${brand.emphasisRule}`);
+  if (brand?.designToolkit?.emphasisMarks?.rules) {
+    parts.push(`H1 MARK RULES: ${brand.designToolkit.emphasisMarks.rules.join(" | ")}`);
+  }
+  if (brand?.adFormats?.dont) parts.push(`AD FORMAT DON'Ts: ${brand.adFormats.dont.join(" | ")}`);
+  if (brand?.photography) {
+    const photo = brand.photography;
+    const rules = [
+      photo.guideline,
+      photo.imageMasks,
+      photo.coloredBorders,
+      Array.isArray(photo.avoid) && photo.avoid.length ? `Avoid: ${photo.avoid.slice(0, 4).join("; ")}` : "",
+    ].filter(Boolean);
+    if (rules.length) parts.push(`PHOTOGRAPHY RULES: ${rules.join(" | ")}`);
+  }
   if (ctx?.lessons?.length) {
     parts.push(
       `RECALLED LESSONS you must honor: ` +
@@ -213,7 +218,7 @@ function sessionIdFrom(ctx, page) {
 //   status: ({ role, ctx }) -> "<status doing-line>"
 //
 // `runAgent` iterates the agent's granted tools in DISPATCH_ORDER (the data-flow
-// order: read -> imagery -> build -> audit -> language -> write) and runs each
+// order: read -> build -> audit -> language -> write) and runs each
 // entry, merging returns. There is NO priority if/else and NO role-name routing.
 // `critique` ALWAYS runs (both pages) even when not explicitly granted, because
 // it is a neutral quality capability the demo's spine depends on (C4).
@@ -224,8 +229,6 @@ function sessionIdFrom(ctx, page) {
 // priority if/else. `critique` is appended in runAgent (always-run).
 const DISPATCH_ORDER = Object.freeze([
   "cognee_recall",  // read memory first (threads recalled rules onto ctx)
-  "image_gen",      // produce a hero image (threads ctx.heroImage) before the build
-  "svg_image",      // OR an inline SVG hero (threads ctx.brief.imageDirective)
   "html_build",     // build the page (consumes the whole brief incl. recalled rules)
   "a11y_check",     // audit produced/ctx HTML
   "contrast_check",
@@ -246,36 +249,9 @@ export const SKILL_REGISTRY = Object.freeze({
     status: () => "recalling prior in-run traces from memory",
   },
 
-  image_gen: {
-    name: "image_gen",
-    params: { writes: ["ctx.heroImage", "ctx.brief.imageDirective"] },
-    run: async ({ agent, agentId, page, ctx, deps, emit, result }) => {
-      const img = await runImageGen({ agent, agentId, page, ctx, deps, emit });
-      return { ...(result || {}), ...img };
-    },
-    status: () => "generating an on-brand hero image to embed",
-  },
-
-  svg_image: {
-    name: "svg_image",
-    params: { writes: ["ctx.brief.imageDirective"] },
-    run: async ({ agent, page, ctx, deps, result }) => {
-      const svg = await runSvgImage({ agent, deps, ctx });
-      // Wire the SVG into the typed BUILD BRIEF as an image directive so the
-      // builder actually consumes it (no dropped agent output, Phase 2.3).
-      if (svg && ctx && typeof ctx === "object") {
-        ctx.brief = ctx.brief || {};
-        ctx.brief.imageDirective =
-          "Embed this exact inline on-brand SVG as the hero visual: " + svg;
-      }
-      return { ...(result || {}), role: agent.role, produces: "svg", output: svg };
-    },
-    status: () => "generating an inline on-brand SVG with Codex",
-  },
-
   html_build: {
     name: "html_build",
-    params: { reads: ["ctx.brief", "ctx.rules", "ctx.lessons", "ctx.heroImage"], writes: ["ctx.html", "ctx.htmlRef"] },
+    params: { reads: ["ctx.brief", "ctx.rules", "ctx.lessons"], writes: ["ctx.html", "ctx.htmlRef"] },
     run: async ({ agent, agentId, gen, page, ctx, deps, emit, result }) => {
       const built = await runHtmlBuild({ agent, agentId, gen, page, ctx, deps, emit });
       return { ...(result || {}), ...built };
@@ -571,9 +547,9 @@ async function runRecall({ agent, agentId, page, ctx, deps, emit }) {
 // ---- tool: html_build (Codex; writes snapshot; returns htmlRef) -----------
 // Consumes the typed BUILD BRIEF (Phase 2.3): every non-builder agent fills a
 // named slot on ctx.brief and the builder consumes the WHOLE brief — no dropped
-// agent output. Slots: copy, sectionOrder, layoutDirection, typeScale,
-// imageDirective, mustFix[]. mustFix carries THIS turn's critique findings into
-// THIS turn's build (1.7). NO regex lesson-selection.
+// agent output. Slots: copy, sectionOrder, layoutDirection, typeScale, mustFix[].
+// mustFix carries THIS turn's critique findings into THIS turn's build (1.7).
+// NO regex lesson-selection.
 async function runHtmlBuild({ agent, agentId, gen, page, ctx, deps, emit }) {
   const { codexBuildSite, brand, goal } = deps;
   const brief = (ctx && ctx.brief) || {};
@@ -605,15 +581,6 @@ async function runHtmlBuild({ agent, agentId, gen, page, ctx, deps, emit }) {
   // so the A/B is fair and the in-run memory win comes purely from recalled traces.
   const dsBrief = designSystemBrief(brand);
   if (dsBrief) copyHint += `. ${dsBrief}`;
-
-  // Hero imagery: prefer an image_gen data URI (ctx.heroImage); else any inline
-  // SVG directive an svg_image agent filled into the brief. Append AFTER the
-  // truncation so the (long) data URI / SVG isn't clipped.
-  if (ctx?.heroImage) {
-    copyHint += `. Embed this exact on-brand hero image as the hero visual via <img alt="TikTok for Business hero" src="${ctx.heroImage}">`;
-  } else if (brief.imageDirective) {
-    copyHint += `. ${brief.imageDirective}`;
-  }
 
   // Thread the concrete brand/design FIX-RULES into the build. These come from
   // (a) the recalled in-run traces the orchestrator folded onto ctx.rules and
@@ -792,7 +759,7 @@ function designSystemBrief(brand) {
   if (radius) {
     const named = radius.named && Object.entries(radius.named)
       .map(([k, v]) => `${k} ${v}`).join(", ");
-    if (named) parts.push(`Radius tokens: ${named}. CTA buttons are PILLS (100% roundness); image masks use 25%/50%; roundness limited to 25/50/100%.`);
+    if (named) parts.push(`Radius tokens: ${named}. CTA buttons are 100%-round brand BUBBLES; non-CTA chips/labels must not use stadium-pill styling. Roundness limited to 25/50/100%.`);
   }
 
   // DEPTH/EFFECTS: NO shadows — flat color blocks + layered shapes.
@@ -801,8 +768,15 @@ function designSystemBrief(brand) {
   // SHAPES: bubbles derived from the TikTok logo circles.
   const shapes = tokens.shapes;
   if (shapes) {
-    const rot = shapes.imageRotationIncrementDeg || 10;
-    parts.push(`Shapes: use BUBBLES derived from the two circles in the TikTok logo (and bubbles/pills as CTAs); images may rotate in ${rot}° increments.`);
+    const rot = shapes.rotationIncrementDeg || 10;
+    parts.push(`Shapes: use BUBBLES derived from the two circles in the TikTok logo; CTAs are word-holding bubble buttons, not generic web pills. Flat shape accents may rotate in ${rot}° increments.`);
+    const marks = shapes.emphasisMarks;
+    if (marks?.rules) {
+      parts.push(`Emphasis marks: add two different-color marks to every H1; use only a square bracket mark at sentence end; size/alignment follows the headline x-height.`);
+    }
+    if (shapes.patterns) {
+      parts.push(`Patterns: use dot patterns only as background/divider texture on high-contrast or non-matching fields; never under text, on imagery, or on same/similar colors.`);
+    }
   }
 
   // Hard usage rules baked into the system. Prefer rules pulled from the actual
@@ -828,9 +802,11 @@ function designSystemBrief(brand) {
     "COMPOSE THE PAGE FROM THESE NAMED COMPONENTS (do NOT inline-style raw atoms, do NOT invent layout from scratch): " +
     "use .ds-hero (split full-bleed hero) for the opening; .ds-feature-grid with .ds-grid-3 for features; " +
     ".ds-stat-band for proof numbers; .ds-steps with .ds-grid-3 for how-it-works; .ds-cta-band for the closing " +
-    "call to action; .ds-figure (with .ds-figure-25/.ds-figure-50 and an optional .ds-rotate-10) for ALL imagery — " +
+    "call to action; .ds-figure (with .ds-figure-25/.ds-figure-50 and optional 10°-increment rotation classes) for CSS/type composition only — " +
     "NEVER a bare rectangle or grey placeholder; .ds-bubble-cluster for the signature overlapping-circle accent; " +
-    ".ds-chip for eyebrow labels; and .ds-grid-2/.ds-grid-3 for any multi-column row. Drop the component skeletons " +
+    ".ds-chip only for small non-CTA labels; .ds-mark-cross/.ds-mark-chevron/.ds-mark-breadcrumbs/.ds-mark-bracket-square/.ds-mark-mixed-cross for H1 accents; " +
+    ".ds-pattern[-lg/-dual/-overlap] for non-text background/divider texture; .ds-bubble-text variants for word-holding bubbles; .ds-logo only for official logo assets; " +
+    ".ds-dma-lockup/.ds-phone-frame/.ds-super-bubble for ad-format compositions; and .ds-grid-2/.ds-grid-3 for any multi-column row. Drop the component skeletons " +
     "in and fill real copy."
   );
   return parts.join(" ");
@@ -859,148 +835,8 @@ function designSystemRules(css) {
     "One brand color per composition; pair with black or white.",
     "Razzmatazz (#FE2C55) is the ONLY color allowed to emphasize text.",
     "Splash (#25F4EE) NEVER highlights text; on Splash, text is black.",
-    "100%-round pills are reserved for CTA buttons.",
+    "100%-round stadium bubbles are reserved for CTA / word-bubble components; chips are not CTAs.",
   ];
-}
-
-// ---- tool: svg_image (Codex; inline <svg>) --------------------------------
-async function runSvgImage({ agent, deps, ctx }) {
-  const { codexRun, brand } = deps;
-  const c = brand?.colors || {};
-  // Use the design-system color roles when present so the SVG matches the page.
-  const roles = brand?.tokens?.color?.roles || {};
-  const primary = roles.primary || c.primary;
-  const accent = roles.secondary || c.accent;
-  const prompt =
-    groundedPrompt(agent, deps, ctx) + "\n\n" +
-    `Produce ONE inline, self-contained, FLAT <svg> illustration on brand ` +
-    `(primary ${primary}, accent ${accent}). Solid fills only — NO gradients, ` +
-    `NO external images, NO <defs><linearGradient>. ` +
-    `OUTPUT ONLY the <svg>...</svg> element, nothing else.`;
-  const raw = await codexRun(prompt, { timeoutMs: 120_000 });
-  const svg = extractSvg(raw);
-  if (!svg) throw new Error("svg_image: Codex returned no <svg> element");
-  return svg;
-}
-
-// ---- tool: image_gen (REAL on-brand image; threads a data URI to embed) ----
-// Calls generateImage({prompt,brand}) from ./image.mjs (frozen {path,dataUri}).
-// The data URI is threaded onto ctx.heroImage so the html_build agent embeds it,
-// and returned as result.output. A test may inject deps.generateImage to stub.
-async function runImageGen({ agent, agentId, page, ctx, deps, emit }) {
-  const { brand } = deps;
-
-  // NO-KEY BEHAVIOR (build-quality): the OpenAI Images API (image.mjs) requires
-  // OPENAI_API_KEY. Without a key we DO NOT inject a synthetic hero — the old
-  // keyless template SVG rendered as amateur colored-block junk and read as
-  // "unfinished". Instead we ship NO hero image; the builder then produces a strong
-  // TYPE-LED hero (the build prompt forbids invented/placeholder graphics). When a
-  // key IS set, real gpt-image-1 art flows below. Identical on BOTH pages (fairness,
-  // never _ablate-gated): both get a real image with a key, neither without — so no
-  // image-capability asymmetry is introduced.
-  const injected = typeof deps?.generateImage === "function";
-  if (!injected && !process.env.OPENAI_API_KEY) {
-    emit({ type: "agent.status", agentId, doing: "no hero image (no OPENAI_API_KEY) — type-led hero" });
-    return {
-      role: agent.role,
-      produces: "image",
-      output: { dataUri: "", path: "", skipped: "no_api_key" },
-    };
-  }
-
-  const c = brand?.colors || {};
-  // Prefer the design system's resolved color roles when present so the image
-  // uses the same palette/contrast pairing the page will (e.g. on Splash, black).
-  const roles = brand?.tokens?.color?.roles || {};
-  const primary = roles.primary || c.primary;
-  const accent = roles.secondary || c.accent;
-  const bg = roles.bg || c.bg;
-  const prompt = [
-    groundedPrompt(agent, deps, ctx),
-    "",
-    `Generate ONE polished, on-brand HERO IMAGE for a "${deps?.goal || "TikTok for Business"}" marketing page — a real, concrete marketing subject (e.g. a creator filming a short vertical video on a phone, a phone showing a short-form video feed, or the product UI in use), NOT abstract colored blocks or shapes.`,
-    `Style: flat, bold, ${Array.isArray(brand?.tone) ? brand.tone.join("/") : brand?.tone}; clean composition with a clear focal subject.`,
-    `Use only the brand design-system palette (primary ${primary}, accent ${accent} on ${bg}). NO gradients, no off-palette colors, no generic AI stock look, no text/lorem baked into the image.`,
-  ].join("\n");
-
-  // Prefer an injected generateImage (tests/orchestrator), else load image.mjs.
-  // image.mjs is built in parallel; if it isn't present yet, OR the API errors at
-  // runtime, degrade gracefully (the agent still completes, just without an
-  // embedded image) rather than crash the run.
-  let img = null;
-  try {
-    const gen = injected ? deps.generateImage : await loadGenerateImage();
-    // image.mjs's frozen signature requires a non-empty `name` (it slugifies it
-    // into the output filename and throws if absent). Derive a stable per-page
-    // per-generation name so concurrent builds don't collide.
-    img = await gen({ prompt, brand, name: `hero-${page}-${agent.version || 1}` });
-  } catch {
-    img = null;
-  }
-
-  const dataUri = img && typeof img.dataUri === "string" ? img.dataUri : "";
-  const imgPath = img && typeof img.path === "string" ? img.path : "";
-
-  // Thread the data URI forward so the builder embeds the produced image.
-  if (dataUri && ctx && typeof ctx === "object") ctx.heroImage = dataUri;
-
-  emit({ type: "agent.status", agentId, doing: dataUri ? "generated an on-brand hero image" : "image generation produced no image" });
-
-  return {
-    role: agent.role,
-    produces: "image",
-    output: { dataUri, path: imgPath },
-    heroImage: dataUri || undefined,
-  };
-}
-
-// ---- keyless pure-JS TEMPLATE SVG hero (Phase 2.5) -------------------------
-// A truly keyless on-brand hero: composes a FLAT SVG (solid fills only — NO
-// gradients) from the brand's design-system color roles + tone, base64-encodes
-// it as a data: URI the builder embeds exactly like a generated image. No model
-// call, no network, no API key — so the run completes (and shows a hero) on both
-// pages regardless of OPENAI_API_KEY. Returns "" only if the brand has no usable
-// colors (the builder then ships without a hero, as before).
-function templateHeroDataUri(brand, goal) {
-  const c = (brand && brand.colors) || {};
-  const roles = (brand && brand.tokens && brand.tokens.color && brand.tokens.color.roles) || {};
-  const bg = roles.bg || c.bg || "#000000";
-  const primary = roles.primary || c.primary || "#FE2C55";
-  const accent = roles.secondary || c.accent || "#25F4EE";
-  const fg = roles.fg || c.fg || "#FFFFFF";
-  if (!primary && !accent) return "";
-
-  // A composed brand SCENE that FILLS the frame (COMPONENTS.md §5) — NOT the old
-  // flat-rect + grey-skeleton-bar amateur tell. It reads as the page's own
-  // .ds-bubble-cluster + .ds-figure language so the embedded hero matches the
-  // composed page: a full-bleed field, two large flat rectangles rotated ±10° and
-  // overlapping toward the center (depth via LAYERING, never shadow), then the
-  // signature TikTok bubble cluster — a large primary circle, an overlapping
-  // accent (Splash) circle, and a small bg circle, derived from the logo's two
-  // circles. Solid fills only — NO gradients, NO filter/shadow. There are NO
-  // grey text-skeleton bars: the real headline is live .ds-h1 HTML beside this
-  // figure, never faked inside the image.
-  const W = 1200, H = 630;
-  const svg =
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="On-brand hero">` +
-      `<rect width="${W}" height="${H}" fill="${esc(bg)}"/>` +
-      `<g transform="rotate(-10 ${W * 0.34} ${H * 0.5})"><rect x="${W * 0.06}" y="${H * 0.16}" width="${W * 0.52}" height="${H * 0.68}" fill="${esc(primary)}"/></g>` +
-      `<g transform="rotate(10 ${W * 0.7} ${H * 0.5})"><rect x="${W * 0.5}" y="${H * 0.1}" width="${W * 0.42}" height="${H * 0.5}" fill="${esc(fg)}" opacity="0.96"/></g>` +
-      `<circle cx="${W * 0.7}" cy="${H * 0.62}" r="${H * 0.22}" fill="${esc(primary)}"/>` +
-      `<circle cx="${W * 0.82}" cy="${H * 0.72}" r="${H * 0.16}" fill="${esc(accent)}"/>` +
-      `<circle cx="${W * 0.6}" cy="${H * 0.78}" r="${H * 0.07}" fill="${esc(bg)}"/>` +
-    `</svg>`;
-  const b64 = Buffer.from(svg, "utf8").toString("base64");
-  return `data:image/svg+xml;base64,${b64}`;
-}
-
-// Minimal XML-attribute escaper for color/string values placed into SVG markup.
-function esc(s) {
-  return String(s == null ? "" : s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 // ---------------------------------------------------------------------------
@@ -1457,9 +1293,10 @@ export function brandRuleViolations(html, brand) {
   const out = [];
   const h = String(html || "");
   const lower = h.toLowerCase();
+  const withoutComments = lower.replace(/<!--[\s\S]*?-->|\/\*[\s\S]*?\*\//g, "");
 
   // 1) GRADIENTS — the brand literally says "Do not use gradients."
-  if (/gradient/i.test(lower) || /linear-gradient|radial-gradient|bg-gradient|<lineargradient|<radialgradient/i.test(lower)) {
+  if (/(?:linear|radial|conic|repeating-linear|repeating-radial)-gradient|bg-gradient|<lineargradient|<radialgradient/i.test(withoutComments)) {
     out.push("Gradient present — the brand forbids gradients (flat brand-color blocks only).");
   }
 
@@ -1507,7 +1344,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     // ---- stub deps (every "real call" is replaced with a deterministic stub) ----
     const events = [];
     const emit = (ev) => events.push(ev);
-    const calls = { chat: 0, chatJSON: 0, codexBuild: 0, codexRun: 0, recallInRun: 0, writeTrace: 0, genImage: 0, critique: 0 };
+    const calls = { chat: 0, chatJSON: 0, codexBuild: 0, codexRun: 0, recallInRun: 0, writeTrace: 0, critique: 0 };
     let lastBuildCopyHint = "";
     let lastBuildRules = null;
     let lastBuildPriorHtml = null;
@@ -1575,22 +1412,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         lastBuildCopyHint = String(copyHint || "");
         lastBuildRules = Array.isArray(rules) ? rules.slice() : (rules === undefined ? null : rules);
         lastBuildPriorHtml = priorHtml == null ? null : String(priorHtml);
-        // Echo any embedded hero image so we can assert the builder used it.
-        const imgMatch = lastBuildCopyHint.match(/<img[^>]*src="([^"]+)"[^>]*>/i);
-        const img = imgMatch ? imgMatch[0] : "";
         // In REVISE MODE (priorHtml present) emit a CORRECTED doc that visibly
         // applies the rules: drop any gradient + add the accent so the stub
         // mirrors what real codexBuildSite is contracted to do.
         if (priorHtml != null) {
           return `<!doctype html><html lang="en"><head></head><body data-revised="1"><a style='background:#25F4EE;color:#000000'>Get started free</a><h1>Go viral. Get customers.</h1></body></html>`;
         }
-        return `<!doctype html><html lang="en"><head></head><body>${img}<a style='background:#25F4EE;color:#000000'>CTA</a></body></html>`;
+        return `<!doctype html><html lang="en"><head></head><body><a style='background:#25F4EE;color:#000000'>CTA</a></body></html>`;
       },
       async codexRun() { calls.codexRun++; return "<svg viewBox='0 0 10 10'><rect width='10' height='10' fill='#FE2C55'/></svg>"; },
-      // Stub for image_gen (image.mjs is built in parallel; frozen {path,dataUri}).
-      async generateImage(args) { calls.genImage++; lastImageArgs = args || {}; return { path: "/tmp/hero.png", dataUri: "data:image/png;base64,STUBHEROIMAGE==" }; },
     };
-    let lastImageArgs = {};
 
     // Every runAgent ctx MUST carry the threaded sessionId (CONTRACTS §8 / H4);
     // skills.mjs READS it and refuses to reconstruct the legacy `${page}-run`.
@@ -1720,16 +1551,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const edgeSpawn = events.find((e) => e.type === "agent.spawned");
     log(edgeSpawn && !("grantProvenance" in edgeSpawn) && !("credit" in edgeSpawn), "credit: agent.spawned omits an empty grantProvenance array and a flaw-less credit object");
 
-    // ---- 6) svg_image (wires the inline SVG into ctx.brief.imageDirective) ----
-    const svgCtx = baseCtx();
-    r = await runAgent({
-      agent: { role: "image-sourcer", version: 1, instructions: "Make a flat brand SVG.", tools: ["svg_image"] },
-      gen: 0, page: "memory", ctx: svgCtx, deps, emit,
-    });
-    log(r.produces === "svg" && typeof r.output === "string" && r.output.startsWith("<svg"), "svg_image: returns <svg> output");
-    log(calls.codexRun === 1, "svg_image: made real codexRun call");
-    log(typeof svgCtx.brief.imageDirective === "string" && /<svg/.test(svgCtx.brief.imageDirective), "svg_image: wires the SVG into ctx.brief.imageDirective (no dropped output)");
-
     // ---- 7) cognee_trace (write) — critique + trace combined ----
     events.length = 0;
     calls.writeTrace = 0;
@@ -1742,62 +1563,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     log(!events.some((e) => e.type === "trace.written"), "cognee_trace: agent path emits no trace.written (orchestrator writes only resolved-verified traces)");
     log(Array.isArray(r.findings) && r.findings.length > 0, "critique still produces findings that feed the orchestrator's verified trace step");
     void lastTraceArgs; void allTraceRecs;
-
-    // ---- 7b) image_gen: threads a data URI; builder embeds it ----
-    events.length = 0;
-    calls.genImage = 0; calls.codexBuild = 0;
-    const imgCtx = { copyHint: "Go viral.", seq: 0, sessionId: sid("memory") };
-    r = await runAgent({
-      agent: { role: "image-sourcer", version: 1, instructions: "Make an on-brand hero image.", tools: ["image_gen"] },
-      gen: 0, page: "memory", ctx: imgCtx, deps, emit,
-    });
-    log(calls.genImage === 1, "image_gen: made real generateImage call");
-    log(r.produces === "image" && r.output && r.output.dataUri.startsWith("data:image/"), "image_gen: returns {dataUri}");
-    log(imgCtx.heroImage === "data:image/png;base64,STUBHEROIMAGE==", "image_gen: threads ctx.heroImage");
-    log(events.some((e) => e.type === "agent.status" && /hero image/i.test(e.doing)), "image_gen: emits status naming the skill");
-    // frozen image.mjs signature requires a non-empty `name` — we must pass one.
-    log(typeof lastImageArgs.name === "string" && lastImageArgs.name.length > 0, "image_gen: passes a non-empty name to generateImage (frozen sig)");
-
-    // ---- 7b-i) image_gen with NO OPENAI_API_KEY => SKIP (no placeholder hero) ----
-    // Build-quality: without a key we do NOT inject a synthetic colored-block hero
-    // (it read as amateur junk). The skill no-ops cleanly — no throw, no ctx.heroImage,
-    // a skipped flag — and the builder ships a TYPE-LED hero. Symmetric on both pages.
-    events.length = 0;
-    const savedKey = process.env.OPENAI_API_KEY;
-    const savedGen = deps.generateImage;
-    delete process.env.OPENAI_API_KEY;
-    delete deps.generateImage; // force the REAL (key-gated) path -> no-key skip
-    const keylessCtx = { copyHint: "Go viral.", seq: 0, sessionId: sid("no-memory") };
-    let keylessOk = true;
-    try {
-      r = await runAgent({
-        agent: { role: "image-sourcer", version: 1, instructions: "Make a hero image.", tools: ["image_gen"] },
-        gen: 0, page: "no-memory", ctx: keylessCtx, deps, emit,
-      });
-    } catch { keylessOk = false; }
-    log(keylessOk, "image_gen (no key): did NOT throw — run continues");
-    log(r && r.produces === "image" && r.output && r.output.skipped === "no_api_key" && r.output.dataUri === "", "image_gen (no key): skips cleanly (no placeholder hero)");
-    log(keylessCtx.heroImage === undefined, "image_gen (no key): does NOT thread a placeholder onto ctx.heroImage");
-    log(events.some((e) => e.type === "agent.status" && /no hero image/i.test(e.doing)), "image_gen (no key): emits the skip status");
-    // restore env + injected stub for the rest of the suite
-    if (savedKey !== undefined) process.env.OPENAI_API_KEY = savedKey;
-    deps.generateImage = savedGen;
-    calls.genImage = 0;
-    // a builder that runs AFTER image_gen embeds the threaded image
-    r = await runAgent({
-      agent: { role: "frontend-implementer", version: 1, instructions: "Build the page.", tools: ["html_build"] },
-      gen: 0, page: "memory", ctx: imgCtx, deps, emit,
-    });
-    log(/STUBHEROIMAGE/.test(lastBuildCopyHint), "image_gen->html_build: hero image passed to builder copyHint");
-    log(typeof r.output === "string" && /STUBHEROIMAGE/.test(r.output), "image_gen->html_build: produced HTML embeds the image");
-
-    // ---- 7c) image_gen + html_build on the SAME agent ----
-    const oneCtx = { copyHint: "", seq: 0, sessionId: sid("memory") };
-    r = await runAgent({
-      agent: { role: "frontend-implementer", version: 1, instructions: "Make a hero image then build the page.", tools: ["image_gen", "html_build"] },
-      gen: 1, page: "memory", ctx: oneCtx, deps, emit,
-    });
-    log(r.produces === "html" && /STUBHEROIMAGE/.test(r.output), "image_gen+html_build (one agent): build embeds its own image");
 
     // ---- 7d) a11y_check: real issues on bad HTML, clean on good ----
     const badA11y = "<html><body><img src='x.png'><button></button></body></html>";
@@ -1899,8 +1664,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     log(Object.keys(TOOL_PALETTE).sort().join(",") === SKILL_PALETTE.slice().sort().join(","), "registry: TOOL_PALETTE prose matches the registry keys exactly");
     log(!SKILL_PALETTE.includes("brand_tokens") && !("brand_tokens" in TOOL_PALETTE), "registry: brand_tokens is DELETED (not in registry or palette)");
     // the exact frozen skill list (CONTRACTS §7)
-    const FROZEN = ["html_build","svg_image","image_gen","a11y_check","contrast_check","copy_lint","copywriter","info_architect","typographer","critique","cognee_recall","cognee_trace"];
-    log(FROZEN.every((n) => SKILL_PALETTE.includes(n)) && SKILL_PALETTE.length === FROZEN.length, "registry: palette == the frozen 12-skill list");
+    const FROZEN = ["html_build","a11y_check","contrast_check","copy_lint","copywriter","info_architect","typographer","critique","cognee_recall","cognee_trace"];
+    log(FROZEN.every((n) => SKILL_PALETTE.includes(n)) && SKILL_PALETTE.length === FROZEN.length, "registry: palette == the frozen 10-skill list");
 
     // ALLOW-LISTING: cognee_recall on a NON-memory page THROWS (structural A/B).
     let threwRecallNoMem = false;

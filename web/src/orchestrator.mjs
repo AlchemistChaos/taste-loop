@@ -41,6 +41,7 @@
 import { planTeam } from "./team.mjs";
 import { runAgent, reviseHtml } from "./skills.mjs";
 import { codexCritique, codexBuildSite, codexRun, designInventory } from "./codex.mjs";
+import { judgeSite } from "./judge.mjs";
 import { renderShot } from "./render.mjs";
 import { chat, chatJSON } from "./ollama.mjs";
 
@@ -67,6 +68,8 @@ const TURN_CAP = 20;
 
 // feedback_alpha passed to memory.improve (CONTRACTS §1 cmd_improve). Any > 0.
 const FEEDBACK_ALPHA = 0.5;
+const ACCEPT_SCORE_MARGIN = 3;
+const AXIS_DROP_TOLERANCE = 4;
 
 // ---------------------------------------------------------------------------
 // Lesson helpers (NO regex selection — v3.1 Guardrail 5).
@@ -180,7 +183,6 @@ const ROLE_AFFINITY = [
   ["gradient", "visual-designer"],
   ["layout", "visual-designer"],
   ["spacing", "visual-designer"],
-  ["image", "image-sourcer"],
   ["section", "info-architect"],
 ];
 
@@ -215,31 +217,6 @@ function creditAgentId(finding, creditMap, page, gen) {
 // the snapshot dir so the UI can reference it (htmlRef-relative via run.mjs).
 function preShotPath(page, gen, kind) {
   return path.join(snapDir(), `${page}-g${gen}-${kind}.png`);
-}
-
-// ---------------------------------------------------------------------------
-// IMAGE: post-build safety net. The builder is INSTRUCTED to embed ctx.heroImage
-// (skills.runHtmlBuild appends an <img src="..."> directive to its copyHint), but
-// Codex can ignore the instruction. If a hero image was generated and the produced
-// HTML does NOT already reference it, inject it as the literal first hero visual so
-// the page actually USES the generated image. Returns the (possibly) updated html.
-// ---------------------------------------------------------------------------
-function injectHeroImage(html, dataUri) {
-  const h = String(html || "");
-  const uri = String(dataUri || "");
-  if (!uri || !h) return h;
-  // Already embedded (builder honored the directive)? leave it alone.
-  if (h.includes(uri)) return h;
-  const imgTag =
-    `<img alt="TikTok for Business hero" src="${uri}" ` +
-    `style="display:block;max-width:100%;height:auto;margin:0 auto" />`;
-  // Prefer injecting at the top of <body>; else just after <body ...>; else prepend.
-  const bodyOpen = h.match(/<body\b[^>]*>/i);
-  if (bodyOpen) {
-    const at = bodyOpen.index + bodyOpen[0].length;
-    return h.slice(0, at) + imgTag + h.slice(at);
-  }
-  return imgTag + h;
 }
 
 // ---------------------------------------------------------------------------
@@ -295,11 +272,6 @@ function buildPreviewPage({ ctx, brand, goal }) {
     ? ctx.sections
     : (Array.isArray(brand?.sections) ? brand.sections : ["hero", "problem", "how-it-works", "proof", "cta"]);
 
-  // The hero image, if image_gen produced one, makes the preview feel complete.
-  const heroImg = ctx?.heroImage
-    ? `<img class="ds-image-mask" alt="TikTok for Business hero" src="${ctx.heroImage}" style="max-width:100%;height:auto;margin-top:var(--space-6)" />`
-    : "";
-
   // Section cards (skip "hero" — it's the headline block above).
   const cards = sections
     .filter((s) => !/^hero$/i.test(String(s)))
@@ -342,7 +314,6 @@ function buildPreviewPage({ ctx, brand, goal }) {
         <a class="ds-btn ds-btn-primary" href="#">Get started free</a>
         <a class="ds-btn ds-btn-outline" href="#">See how it works</a>
       </div>
-      ${heroImg}
     </div>
   </main>
   <section class="ds-section">
@@ -398,6 +369,122 @@ function mergeRules(existing, incoming) {
   return out;
 }
 
+function plannedEventForTurn({ gen, isLeanTurn, agents = [], strategy = "" }) {
+  if (isLeanTurn) {
+    return {
+      type: "master.planned",
+      gen,
+      roster: ["refine"],
+      strategy: strategy || "Refine the carried page from critique findings; do not rebuild from scratch.",
+    };
+  }
+  return {
+    type: "master.planned",
+    gen,
+    roster: (Array.isArray(agents) ? agents : []).map((a) => a && a.role).filter(Boolean),
+    strategy,
+  };
+}
+
+function shouldUseSurgicalTurn({ gen, pageHtml, keptJudgement }) {
+  if (!(gen >= 2 && typeof pageHtml === "string" && pageHtml.trim())) return false;
+  const quality = Number(keptJudgement && keptJudgement.quality);
+  return Number.isFinite(quality) && quality >= 82;
+}
+
+function numericScore(judgement) {
+  const n = Number(judgement && judgement.score);
+  return Number.isFinite(n) ? n : null;
+}
+
+function chooseKeptPage({ previous, candidate }) {
+  const candidateScore = numericScore(candidate && candidate.judgement);
+  const previousScore = numericScore(previous && previous.judgement);
+  const hasPrevious =
+    previous && typeof previous.html === "string" && previous.html.trim() &&
+    previous.judgement && previousScore != null;
+
+  let rejectReason = "";
+  if (hasPrevious && candidate && candidate.judgement) {
+    const prevQ = Number(previous.judgement.quality);
+    const candQ = Number(candidate.judgement.quality);
+    const prevB = Number(previous.judgement.brandAdherence);
+    const candB = Number(candidate.judgement.brandAdherence);
+    const qualityDrop = Number.isFinite(prevQ) && Number.isFinite(candQ) && candQ < prevQ - AXIS_DROP_TOLERANCE;
+    const brandDrop = Number.isFinite(prevB) && Number.isFinite(candB) && candB < prevB - AXIS_DROP_TOLERANCE;
+    if (qualityDrop || brandDrop) {
+      rejectReason = `axis drop exceeds tolerance ${AXIS_DROP_TOLERANCE}`;
+    } else if (candidateScore != null && candidateScore < previousScore + ACCEPT_SCORE_MARGIN) {
+      rejectReason = candidateScore < previousScore
+        ? `candidate score below previous kept score`
+        : `candidate score below acceptance margin ${ACCEPT_SCORE_MARGIN}`;
+    }
+  }
+
+  if (rejectReason) {
+    return {
+      ...previous,
+      reverted: true,
+      rejectReason,
+      candidateScore,
+      previousScore,
+      candidateHtmlRef: candidate && candidate.htmlRef,
+      candidateJudgement: candidate && candidate.judgement,
+    };
+  }
+
+  return {
+    ...(candidate || {}),
+    reverted: false,
+    candidateScore,
+    previousScore,
+  };
+}
+
+function scoreUpdatedEvent({ gen, page, kept }) {
+  const j = (kept && kept.judgement) || {};
+  const ev = {
+    type: "score.updated",
+    gen,
+    page,
+    quality: j.quality,
+    brandAdherence: j.brandAdherence,
+    score: j.score,
+    category: j.category,
+    reasoning: j.reasoning || "",
+    findings: Array.isArray(j.findings) ? j.findings : [],
+    shot: j.shot || "",
+    htmlRef: (kept && kept.htmlRef) || "",
+    reverted: Boolean(kept && kept.reverted),
+    kept: true,
+  };
+  if (kept && kept.candidateScore != null) ev.candidateScore = kept.candidateScore;
+  if (kept && kept.previousScore != null) ev.previousScore = kept.previousScore;
+  if (kept && kept.candidateHtmlRef) ev.candidateHtmlRef = kept.candidateHtmlRef;
+  return ev;
+}
+
+function acceptedDesignRenderedEvent({ kept }) {
+  if (!kept || !kept.htmlRef) return null;
+  return {
+    type: "design.rendered",
+    htmlRef: kept.htmlRef,
+    accepted: true,
+    reverted: Boolean(kept.reverted),
+  };
+}
+
+function acceptedResolvedCount({ resolvedThisTurn, kept }) {
+  return kept && kept.reverted ? 0 : Math.max(0, Number(resolvedThisTurn) || 0);
+}
+
+function resolvedFromAfterCritique(finding, afterFlaws, afterCritiqueOk) {
+  if (!afterCritiqueOk) return false;
+  const flaw = String(finding && finding.flaw || "").trim().toLowerCase();
+  if (!flaw) return false;
+  return !(afterFlaws instanceof Set ? afterFlaws : new Set()).has(flaw);
+}
+
 function threadResult(ctx, result) {
   if (!result || typeof result !== "object") return;
 
@@ -448,35 +535,18 @@ function threadResult(ctx, result) {
     ctx.brief.sectionOrder = result.sections.map(String);
   }
 
-  // visual-designer / typographer / image-sourcer → typed brief slots (2.3).
+  // visual-designer / typographer → typed brief slots (2.3).
   if (typeof result.layoutDirection === "string" && result.layoutDirection.trim()) {
     ctx.brief.layoutDirection = result.layoutDirection.trim();
   }
   if (typeof result.typeScale === "string" && result.typeScale.trim()) {
     ctx.brief.typeScale = result.typeScale.trim();
   }
-  if (typeof result.imageDirective === "string" && result.imageDirective.trim()) {
-    ctx.brief.imageDirective = result.imageDirective.trim();
-  }
-
   // builder → the real page + its snapshot ref
   if (result.produces === "html") {
     if (typeof result.html === "string" && result.html) ctx.html = result.html;
     else if (typeof result.output === "string" && result.output) ctx.html = result.output;
     if (typeof result.htmlRef === "string" && result.htmlRef) ctx.htmlRef = result.htmlRef;
-  }
-
-  // image_gen → an on-brand hero data URI for the builder to embed. runImageGen
-  // already sets ctx.heroImage; mirror it here too in case a result carries it
-  // (so the post-build inject safety net always has it). image_gen is a neutral
-  // capability available to BOTH pages, so this is never _ablate-gated.
-  if (typeof result.heroImage === "string" && result.heroImage) {
-    ctx.heroImage = result.heroImage;
-  }
-
-  // svg / imagery → on-brand image to thread (kept for completeness)
-  if (result.produces === "svg" && typeof result.output === "string") {
-    ctx.image = result.output;
   }
 
   // critique / brand-guardian → findings (accumulate across multiple auditors)
@@ -563,6 +633,8 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
   // exact page (in-run self-improvement) instead of rebuilding from scratch. BOTH pages carry
   // their own; the only difference is the memory page's improvements are guided by recall.
   let pageHtml = null;
+  let pageHtmlRef = "";
+  let keptJudgement = null;
   // Generations actually completed = the in-run "Turns" (improvement rounds). This is the
   // real turn-by-turn axis — NOT the per-agent `turns` cap counter below (which is 1:1 with
   // agents spawned). The HUD "Turns" tile reports THIS.
@@ -633,12 +705,14 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     // churn AND the ~5min/turn cost). The page is improved by the critique->revise steps below
     // (memory-guided via recalled rules), NOT regenerated from scratch each turn.
     const isLeanTurn = gen > 0 && typeof pageHtml === "string" && pageHtml.trim().length > 0;
-    // Turn 0 builds, turn 1 does a whole-page refine, turn 2+ does ONE targeted token-gap fix
-    // (audit the page vs the design-system inventory -> fix the single biggest gap, keep the rest).
-    const surgicalTurn = isLeanTurn && gen >= 2;
+    // Turn 0 builds, later weak pages keep recomposing; once the kept page is already strong,
+    // a later lean turn can do ONE targeted token-gap fix (audit the page vs inventory).
+    const surgicalTurn = isLeanTurn && shouldUseSurgicalTurn({ gen, pageHtml, keptJudgement });
     let strategy = "";
     let agents = [];
-    if (!isLeanTurn) {
+    if (isLeanTurn) {
+      gatedEmit(plannedEventForTurn({ gen, isLeanTurn, agents, strategy }));
+    } else {
       ({ strategy, agents } = await planTeam({
         brand,
         goal,
@@ -649,7 +723,7 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
         // Empty under ablation / on gen 0 / no-memory page.
         credit: (isMemory && !ablateMemory) ? creditByRole : {},
       }));
-      gatedEmit({ type: "master.planned", roster: agents.map((a) => a.role), strategy });
+      gatedEmit(plannedEventForTurn({ gen, isLeanTurn, agents, strategy }));
     }
 
     // ---- PROVENANCE / PROMPT-DIFF -------------------------------------
@@ -699,8 +773,7 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
         sectionOrder: [],
         layoutDirection: "",
         typeScale: "",
-        imageDirective: "",
-        mustFix: [],
+      mustFix: [],
       },
       lessons: (isMemory && !ablateMemory && lessons.length) ? lessons : null,
       lessonForBuild,
@@ -730,6 +803,7 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
       // LEAN TURN: carry the prior page forward and refine it in the critique->revise steps
       // below (targeted, memory-guided). No roster, no from-scratch rebuild — fast + stable.
       ctx.html = pageHtml;
+      ctx.htmlRef = pageHtmlRef;
       gatedEmit({ type: "agent.status", agentId: `${page}-refine-g${gen}`, doing: "refining the existing page — targeted, not a rebuild" });
     } else {
     // Does any agent in this roster already write traces itself (cognee_trace)?
@@ -804,12 +878,6 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
       throw new Error(`[${page} g${gen}] no HTML produced by the team (no fallback).`);
     }
 
-    // IMAGE: if an image_gen agent produced a hero image but the builder didn't
-    // embed it, post-inject it so the judged page actually shows the on-brand
-    // image. (No-op when no image was generated or it's already embedded.)
-    if (ctx.heroImage && !ctx.html.includes(ctx.heroImage)) {
-      ctx.html = injectHeroImage(ctx.html, ctx.heroImage);
-    }
     } // end non-lean (full roster build); lean turns carried the page above
 
     // ===================================================================
@@ -903,20 +971,21 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     //   on this turn's findings only. So the win is NOT "two attempts."
     // ===================================================================
     // resolvedThisTurn: how many of this turn's flaws the revise VERIFIABLY fixed (resolved-proof
-    // below). With the judge removed, THIS is the per-turn "did it improve?" signal — it drives the
-    // Improve counter + Cognee feedback, and (memory only) the verified traces.
+    // below). This drives the Improve counter + Cognee feedback, while the judge
+    // separately decides whether the revised page is good enough to keep.
     let resolvedThisTurn = 0;
+    let pendingVerifiedTraces = [];
     {
-      // Turn 2+ (surgicalTurn): apply ONLY the audited gap fix (the upgrade) — one small,
-      // targeted change, keep the rest of the page intact. Turns 0-1: whole-page refine
-      // (this turn's flaws + recalled prior-turn traces + the constructive upgrade).
+      // Surgical turn: apply ONLY the audited gap fix (the upgrade) — one small,
+      // targeted change, keep the rest of the page intact. Recomposition turns refine
+      // the whole page (this turn's flaws + recalled prior-turn traces + the upgrade).
       // Recalled prior-turn traces, CAPPED to the top few so they don't drown the prompt (audit:
       // 47 raw "do not reintroduce" rules = a wall the model can't weight). This is the carrier
       // that makes MEMORY actually reach the build — it must be present on surgical turns too.
       const cappedRecall = (isMemory && !ablateMemory) ? recalledRules.slice(0, 8) : [];
       let reviseRules;
       if (surgicalTurn) {
-        // Turn 2+ : LEAD with the ONE targeted gap fix, but ALSO carry this turn's flaws + the
+        // Surgical: LEAD with the ONE targeted gap fix, but ALSO carry this turn's flaws + the
         // (capped) recalled traces so the surgical edit doesn't FREEZE known defects in place
         // (the audit's #1 + #3 root causes). The surgical prompt keeps UNRELATED sections stable.
         reviseRules = upgrade ? [`PRIMARY targeted fix (close this gap): ${upgrade}`] : [];
@@ -978,14 +1047,17 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
           let afterShot = "";
           try { afterShot = await renderShot(ctx.html, preShotPath(page, gen, "after")); } catch { afterShot = ""; }
           let afterFlaws = new Set();
+          let afterCritiqueOk = false;
           try {
             const after = await codexCritique({ brand, screenshotPath: afterShot, goal, html: ctx.html });
             const afterFindings = (after && after.findings) || [];
             afterFlaws = new Set(afterFindings.map((c) => String((c && c.flaw) || "").trim().toLowerCase()).filter(Boolean));
-          } catch { afterFlaws = new Set(); }
+            afterCritiqueOk = true;
+          } catch { afterFlaws = new Set(); afterCritiqueOk = false; }
           const verifiedTraces = [];
+          const pendingKeys = new Set();
           for (const f of findingObjs) {
-            const resolved = !afterFlaws.has(f.flaw.toLowerCase()); // present-before AND absent-after
+            const resolved = resolvedFromAfterCritique(f, afterFlaws, afterCritiqueOk); // present-before AND absent-after
             if (resolved) resolvedThisTurn += 1;
             gatedEmit({
               type: "trace.resolved",
@@ -1003,11 +1075,12 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
             // pulls ahead of the flat no-memory page. Not traced under ablation.
             if (resolved && isMemory && !ablateMemory) {
               const key = f.flaw.trim().toLowerCase();
-              if (key && !tracedKeys.has(key)) {
-                tracedKeys.add(key);
+              if (key && !tracedKeys.has(key) && !pendingKeys.has(key)) {
+                pendingKeys.add(key);
                 const ruleText = `Do not reintroduce this already-fixed issue: ${f.flaw}` +
                   (f.brandRuleCited ? ` (brand rule: ${f.brandRuleCited})` : "");
                 verifiedTraces.push({
+                  traceKey: key,
                   role: creditRole(f, credit) || "critique",
                   finding: ruleText,
                   severity: f.severity,
@@ -1016,29 +1089,57 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
               }
             }
           }
-          if (verifiedTraces.length) {
-            try {
-              await memory.writeTraces(sessionId, verifiedTraces);
-              for (const r of verifiedTraces) {
-                tracesCount += 1;
-                gatedEmit({ type: "trace.written", agentId: `${page}-trace-g${gen}`, summary: r.finding });
-              }
-            } catch { /* verified-trace write best-effort; run continues */ }
-          }
+          pendingVerifiedTraces = verifiedTraces;
         }
       }
     }
 
     // ===================================================================
-    // (JUDGE REMOVED) — no per-turn score. The loop is purely CRITIQUE-driven: the critique
-    // (STEP 3) decides what to fix and the revise applies it; the RESOLVED-PROOF above is the
-    // "did it improve?" signal. We still emit a per-gen marker so the UI's Turns tile advances.
+    // SPINE STEP 6 — JUDGE [BOTH] and KEEP-BETTER gate.
+    //   Score the candidate page with the same fixed judge, then only accept it
+    //   as the next baseline when it does not regress below the previous kept
+    //   score. This lets the critique agent explore fixes without allowing a bad
+    //   revision to poison every later turn.
     // ===================================================================
-    gatedEmit({ type: "score.updated", gen, page });
+    const judgement = await judgeSite({ brand, html: ctx.html, goal });
+    const kept = chooseKeptPage({
+      previous: keptJudgement ? { html: pageHtml, htmlRef: pageHtmlRef, judgement: keptJudgement } : null,
+      candidate: { html: ctx.html, htmlRef: ctx.htmlRef, judgement },
+    });
+    if (kept.reverted) {
+      ctx.html = kept.html;
+      ctx.htmlRef = kept.htmlRef;
+      gatedEmit({
+        type: "agent.status",
+        agentId: `${page}-keep-better-g${gen}`,
+        doing: `reverted candidate score ${kept.candidateScore} below previous kept score ${kept.previousScore}`,
+      });
+    }
+    keptJudgement = kept.judgement;
+    const acceptedRender = acceptedDesignRenderedEvent({ kept });
+    if (acceptedRender) gatedEmit(acceptedRender);
+    gatedEmit(scoreUpdatedEvent({ gen, page, kept }));
+    const acceptedResolvedThisTurn = acceptedResolvedCount({ resolvedThisTurn, kept });
+    const acceptedScoreGain =
+      kept.previousScore != null && kept.candidateScore != null && !kept.reverted
+        ? kept.candidateScore - kept.previousScore
+        : null;
+
+    if (isMemory && !ablateMemory && !kept.reverted && pendingVerifiedTraces.length) {
+      try {
+        const tracesToWrite = pendingVerifiedTraces.map(({ traceKey, ...trace }) => trace);
+        await memory.writeTraces(sessionId, tracesToWrite);
+        for (const r of pendingVerifiedTraces) {
+          if (r.traceKey) tracedKeys.add(r.traceKey);
+          tracesCount += 1;
+          gatedEmit({ type: "trace.written", agentId: `${page}-trace-g${gen}`, summary: r.finding });
+        }
+      } catch { /* verified-trace write best-effort; run continues */ }
+    }
 
     // ---- IMPROVEMENTS: a turn where the revise VERIFIABLY fixed >=1 flaw (resolved-proof).
     // Replaces the old "score rose" signal. Computed identically for BOTH pages.
-    if (resolvedThisTurn > 0) {
+    if (acceptedResolvedThisTurn > 0) {
       improvements += 1;
     }
 
@@ -1046,7 +1147,7 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     // upgrade we pursued worked → store it as a "winning direction" so memory accumulates
     // what ADDS quality (not just what to avoid). This is the additive counterpart to the
     // preventive "do not reintroduce X" traces. Memory-only, deduped, never under ablation.
-    if (isMemory && !ablateMemory && upgrade && resolvedThisTurn > 0) {
+    if (isMemory && !ablateMemory && upgrade && acceptedResolvedThisTurn > 0 && acceptedScoreGain != null && acceptedScoreGain >= ACCEPT_SCORE_MARGIN) {
       const key = "upg:" + upgrade.trim().toLowerCase();
       if (!tracedKeys.has(key)) {
         tracedKeys.add(key);
@@ -1067,7 +1168,7 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     // ===================================================================
     if (isMemory && !ablateMemory && typeof memory.feedback === "function" && qaId) {
       // Feedback signal = the RESOLVED-PROOF (did this turn's fixes stick?), not a score.
-      const feedbackScore = resolvedThisTurn > 0 ? 5 : 3;
+      const feedbackScore = acceptedResolvedThisTurn > 0 ? 5 : 3;
       const feedbackText = (findingObjs[0] && findingObjs[0].flaw) ||
         (recalledRules[0]) || "turn fix-resolution signal";
       try {
@@ -1106,14 +1207,17 @@ export async function runPage({ page, gens, memory, brand, emit, snapDir: snapDi
     // so scoreAfter (this gen's score) — and the resulting delta — are real. The
     // UI pops the prompt-diff panel on this event (graceful no-op on thin shapes).
     if (pendingUpskill) {
-      pendingUpskill.scoreAfter = null; // no score (judge removed)
+      pendingUpskill.scoreAfter = numericScore(keptJudgement);
       gatedEmit(pendingUpskill);
       pendingUpskill = null;
     }
 
     // CARRY THE PAGE FORWARD: next turn IMPROVES this page instead of rebuilding
     // from scratch. This is the in-run self-improvement compounding (both pages).
-    if (typeof ctx.html === "string" && ctx.html.trim()) pageHtml = ctx.html;
+    if (typeof ctx.html === "string" && ctx.html.trim()) {
+      pageHtml = ctx.html;
+      pageHtmlRef = typeof ctx.htmlRef === "string" ? ctx.htmlRef : pageHtmlRef;
+    }
     gensRun += 1; // this generation completed
   }
 
@@ -1176,7 +1280,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const ctx = {
       copyHint: 'Hero headline tone: "Make ads people actually watch.". Turn 60s clips into customers',
       sections: ["hero", "problem", "how-it-works", "proof", "cta"],
-      heroImage: "data:image/png;base64,STUB==",
       seq: 0,
     };
     const html = buildPreviewPage({ ctx, brand, goal: GOAL });
@@ -1184,7 +1287,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     log(/href="\.\.\/design-system\.css"/.test(html), "buildPreviewPage: LINKS the live design-system.css");
     log(/ds-btn-primary/.test(html) && /ds-h1/.test(html), "buildPreviewPage: uses .ds-* utilities");
     log(/Make ads people actually watch\./.test(html), "buildPreviewPage: drops in the real hero copy");
-    log(/STUB==/.test(html), "buildPreviewPage: embeds the threaded hero image");
     log(!/gradient/i.test(html), "buildPreviewPage: NO gradients (on-brand)");
     log(/#25F4EE/i.test(brand.designSystemCss) || /design-system\.css/.test(html), "buildPreviewPage: grounded in the design system");
 
@@ -1275,12 +1377,92 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       log(ctxB.brief.layoutDirection === "single-column" && ctxB.brief.typeScale === "1.25 modular", "brief: visual/typographer slots filled");
     }
 
-    // ---- score.updated is now just a PER-GEN MARKER {gen, page} (the JUDGE is removed; no
-    //      score). It only advances the UI Turns tile. ----
+    // ---- master.planned is emitted every gen, including lean refine turns, so
+    //      run.mjs generation accounting stays aligned with the actual loop. ----
     {
-      const ev = { type: "score.updated", gen: 1, page: "memory" };
-      log(typeof ev.gen === "number" && ev.page === "memory" && !("score" in ev),
-        "score.updated: per-gen marker {gen, page} (judge removed — no score)");
+      const lean = plannedEventForTurn({ gen: 2, isLeanTurn: true, agents: [], strategy: "" });
+      log(lean.type === "master.planned" && lean.gen === 2 && JSON.stringify(lean.roster) === JSON.stringify(["refine"]),
+        "plannedEventForTurn: lean turns still emit master.planned with the real gen");
+      const full = plannedEventForTurn({
+        gen: 0,
+        isLeanTurn: false,
+        agents: [{ role: "copywriter" }, { role: "frontend-implementer" }],
+        strategy: "ship a page",
+      });
+      log(full.gen === 0 && full.strategy === "ship a page" && JSON.stringify(full.roster) === JSON.stringify(["copywriter", "frontend-implementer"]),
+        "plannedEventForTurn: full turns emit the planned roster");
+      log(shouldUseSurgicalTurn({ gen: 2, pageHtml: "<main>x</main>", keptJudgement: { quality: 81 } }) === false,
+        "shouldUseSurgicalTurn: low-quality kept pages stay in recomposition mode");
+      log(shouldUseSurgicalTurn({ gen: 2, pageHtml: "<main>x</main>", keptJudgement: { quality: 82 } }) === true,
+        "shouldUseSurgicalTurn: high-quality kept pages may use surgical mode");
+    }
+
+    // ---- judge + keep-better: score.updated describes the KEPT page, and a worse
+    //      candidate is rejected instead of becoming the new baseline. ----
+    {
+      const previous = {
+        html: "<main>previous</main>",
+        htmlRef: "snapshots/previous.html",
+        judgement: { quality: 84, brandAdherence: 90, score: 86, category: "excellent", reasoning: "strong", findings: ["keep this"] },
+      };
+      const worseCandidate = {
+        html: "<main>worse</main>",
+        htmlRef: "snapshots/worse.html",
+        judgement: { quality: 58, brandAdherence: 70, score: 63, category: "decent", reasoning: "regressed", findings: ["weak"] },
+      };
+      const kept = chooseKeptPage({ previous, candidate: worseCandidate });
+      log(kept.html === previous.html && kept.htmlRef === previous.htmlRef && kept.reverted === true,
+        "chooseKeptPage: reverts a candidate that scores below the previous kept page");
+      const ev = scoreUpdatedEvent({ gen: 3, page: "memory", kept });
+      log(ev.type === "score.updated" && ev.score === 86 && ev.quality === 84 && ev.brandAdherence === 90,
+        "scoreUpdatedEvent: emits real judge fields for the kept page");
+      log(ev.reverted === true && ev.candidateScore === 63 && ev.previousScore === 86,
+        "scoreUpdatedEvent: exposes candidate regression metadata when reverted");
+      const acceptedRender = acceptedDesignRenderedEvent({ kept });
+      log(acceptedRender && acceptedRender.type === "design.rendered" && acceptedRender.htmlRef === previous.htmlRef && acceptedRender.accepted === true,
+        "acceptedDesignRenderedEvent: emits the kept htmlRef after the gate");
+      log(acceptedResolvedCount({ resolvedThisTurn: 4, kept }) === 0,
+        "acceptedResolvedCount: reverted candidates get zero accepted resolved fixes");
+
+      const betterCandidate = {
+        html: "<main>better</main>",
+        htmlRef: "snapshots/better.html",
+        judgement: { quality: 90, brandAdherence: 92, score: 91, category: "excellent", reasoning: "better", findings: [] },
+      };
+      const improved = chooseKeptPage({ previous, candidate: betterCandidate });
+      log(improved.html === betterCandidate.html && improved.reverted === false && improved.judgement.score === 91,
+        "chooseKeptPage: accepts a candidate that improves the score");
+
+      const tinyWin = chooseKeptPage({
+        previous,
+        candidate: {
+          html: "<main>tiny</main>",
+          htmlRef: "snapshots/tiny.html",
+          judgement: { quality: 85, brandAdherence: 90, score: 87, category: "excellent", reasoning: "noise", findings: [] },
+        },
+      });
+      log(tinyWin.html === previous.html && tinyWin.reverted === true && /margin/i.test(tinyWin.rejectReason || ""),
+        "chooseKeptPage: rejects tiny noisy score wins below the acceptance margin");
+
+      const axisDrop = chooseKeptPage({
+        previous,
+        candidate: {
+          html: "<main>brand drop</main>",
+          htmlRef: "snapshots/drop.html",
+          judgement: { quality: 92, brandAdherence: 82, score: 88, category: "excellent", reasoning: "brand drift", findings: [] },
+        },
+      });
+      log(axisDrop.html === previous.html && axisDrop.reverted === true && /axis/i.test(axisDrop.rejectReason || ""),
+        "chooseKeptPage: rejects material per-axis drops even when blended score rises");
+    }
+
+    // ---- resolved-proof: if the after-critique fails, do NOT count fixes as resolved. ----
+    {
+      const afterFlaws = new Set(["cta is weak"]);
+      log(resolvedFromAfterCritique({ flaw: "hero is flat" }, afterFlaws, true) === true,
+        "resolvedFromAfterCritique: resolved when original flaw is absent from successful after-critique");
+      log(resolvedFromAfterCritique({ flaw: "hero is flat" }, new Set(), false) === false,
+        "resolvedFromAfterCritique: unresolved when after-critique fails");
     }
 
     // ---- CREDIT (§2.1/§2.5): planTeam is CALLED with `credit: creditByRole`, and that

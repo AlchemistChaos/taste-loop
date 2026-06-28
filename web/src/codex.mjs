@@ -1,4 +1,4 @@
-// codex.mjs — run Codex (GPT-5.4, medium reasoning) non-interactively to BUILD real
+// codex.mjs — run Codex (GPT-5.4, high reasoning) non-interactively to BUILD real
 // site HTML. Uses `codex exec` with the user's ChatGPT auth (keyless).
 //
 // NO FALLBACK: codexRun retries `retries` times (default 1; the gen-loop callers
@@ -20,7 +20,7 @@
 // === Verified working invocation (codex-cli 0.141.0, ChatGPT auth) ===
 //   codex exec \
 //     -c model="gpt-5.4" \
-//     -c model_reasoning_effort="medium" \
+//     -c model_reasoning_effort="high" \
 //     -c approval_policy="never" \
 //     -s read-only \
 //     --skip-git-repo-check \
@@ -34,7 +34,7 @@
 //     for exec you MUST use `-c approval_policy="never"`.
 //   * `gpt-5.4-codex` / `gpt-5.5-codex` are REJECTED with a ChatGPT account
 //     ("model is not supported when using Codex with a ChatGPT account").
-//     `gpt-5.4` (and `gpt-5.5`) work. We default to gpt-5.4 medium per directive.
+//     `gpt-5.4` (and `gpt-5.5`) work. We default to gpt-5.4 high per directive.
 //   * `-o/--output-last-message <FILE>` writes ONLY the agent's final message to a
 //     file — far cleaner than scraping stdout (which is full of TUI chrome).
 //   * `-s read-only` + approval_policy=never => the agent cannot run shell tools
@@ -43,14 +43,11 @@
 //
 // Config (env overridable):
 //   CODEX_MODEL        default "gpt-5.4"
-//   CODEX_EFFORT       default "medium"  (build + default reasoning effort)
-//   CODEX_JUDGE_EFFORT default "medium"  (vision/text judge — faster than HIGH)
+//   CODEX_EFFORT       default "high"  (build + default reasoning effort)
+//   CODEX_JUDGE_EFFORT default "high"  (vision/text judge + critique effort)
+//   CODEX_SERVICE_TIER default "fast"  (set "off"/"none"/"0" to omit)
 //   CODEX_TIMEOUT      default 180000 ms
 //   CODEX_BIN          default "codex"
-//   CODEX_IMAGE        default unset. When "1", codexExecOnce runs with
-//                      `-s workspace-write` (so an image-gen turn may write a file)
-//                      instead of the default `-s read-only`. Opt-in only — the
-//                      default sandbox stays read-only for every other actor.
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -60,10 +57,9 @@ import { fileURLToPath } from "node:url";
 import { renderShot } from "./render.mjs";
 
 const MODEL = process.env.CODEX_MODEL || "gpt-5.4";
-const EFFORT = process.env.CODEX_EFFORT || "medium";
-// Judge effort: MEDIUM by default (2.7) — gpt-5.4 medium is markedly faster than
-// HIGH while still discriminating, and the vision (-i) path does the heavy lifting.
-const JUDGE_EFFORT = process.env.CODEX_JUDGE_EFFORT || "medium";
+const EFFORT = process.env.CODEX_EFFORT || "high";
+const JUDGE_EFFORT = process.env.CODEX_JUDGE_EFFORT || "high";
+const SERVICE_TIER = process.env.CODEX_SERVICE_TIER ?? "fast";
 const DEFAULT_TIMEOUT = Number(process.env.CODEX_TIMEOUT || 180_000);
 const CODEX_BIN = process.env.CODEX_BIN || "codex";
 // Page sections: env-tunable (SECTIONS, default 5) so the page is RICH enough to
@@ -88,13 +84,16 @@ function trimSections(pool, n) {
 }
 
 // Sandbox for `codex exec`. DEFAULT stays "read-only" for every actor so a turn
-// can never touch the filesystem. An OPT-IN image-gen turn (Phase 2.5) may request
-// "workspace-write" — globally via CODEX_IMAGE=1 or per-call via the `sandbox`
-// option on codexExecOnce/codexRun. Anything other than the two known values falls
-// back to "read-only" (never silently widen the sandbox).
-const DEFAULT_SANDBOX = process.env.CODEX_IMAGE === "1" ? "workspace-write" : "read-only";
+// can never touch the filesystem. Per-call code may explicitly request
+// "workspace-write"; anything else falls back to "read-only" (never silently widen).
+const DEFAULT_SANDBOX = "read-only";
 function normalizeSandbox(sandbox) {
   return sandbox === "workspace-write" ? "workspace-write" : "read-only";
+}
+
+function normalizedServiceTier() {
+  const value = String(SERVICE_TIER ?? "").trim();
+  return /^(|0|false|off|none)$/i.test(value) ? "" : value;
 }
 
 // Resolve web/run/design-system.css relative to this file (web/src/codex.mjs).
@@ -136,6 +135,10 @@ function codexExecOnce(prompt, timeoutMs, effort = EFFORT, images = [], sandbox 
           "-c", "suppress_unstable_features_warning=true",
           "-o", lastMsgPath,
         ];
+        const serviceTier = normalizedServiceTier();
+        if (serviceTier) {
+          args.push("-c", "features.fast_mode=true", "-c", `service_tier="${serviceTier}"`);
+        }
         // Attach any images via `-i/--image <FILE>` (codex exec supports this) so
         // the model can judge the rendered DESIGN, not just the HTML source.
         for (const img of images) {
@@ -407,7 +410,7 @@ function summarizeTokens(brand) {
       `(combine with Sofia Pro to highlight ONE keyword, in Razzmatazz). Left or center align; ` +
       `no all-caps/all-lowercase headlines; no gradients/shadows on type; never set body copy in Bold.`);
     if (t.type.googleFontsHref) {
-      lines.push(`The design-system CSS already @imports these Google fonts (League Spartan / Roboto / Baloo 2) — do not add a conflicting CDN font.`);
+      lines.push(`The design-system CSS already @imports these Google fonts (League Spartan for headline/display, Roboto for body, Baloo 2 for emphasis) — do not add a conflicting CDN font.`);
     }
   } else {
     const headingFont = brand.fonts?.heading || "Inter";
@@ -426,9 +429,9 @@ function summarizeTokens(brand) {
   }
   if (t && t.radius) {
     const named = t.radius.named || {};
-    const r = [named.sm && `sm ${named.sm}`, named.md && `md ${named.md}`, named.lg && `lg ${named.lg}`, `pill ${named.pill || "9999px"} (CTA buttons only)`]
+    const r = [named.sm && `sm ${named.sm}`, named.md && `md ${named.md}`, named.lg && `lg ${named.lg}`, `pill ${named.pill || "9999px"} (CTA / word-bubbles only)`]
       .filter(Boolean).join(", ");
-    if (r) lines.push(`RADIUS: ${r}. CTA buttons are PILLS (100% roundness); image masks use 25%/50%; roundness is limited to 25/50/100%.`);
+    if (r) lines.push(`RADIUS: ${r}. CTA buttons are 100%-round brand BUBBLES; non-CTA chips/labels must not use stadium-pill styling. Roundness is limited to 25/50/100%.`);
   }
 
   // ---- Effects / depth: NO shadows — flat color blocks + layered shapes -----
@@ -437,7 +440,7 @@ function summarizeTokens(brand) {
   // ---- Shapes: bubbles from the TikTok logo circles -------------------------
   if (t && t.shapes) {
     const rot = t.shapes.imageRotationIncrementDeg || 10;
-    lines.push(`SHAPES: use BUBBLES derived from the two circles in the TikTok logo (and bubbles/pills as CTAs); images may rotate in ${rot}° increments.`);
+    lines.push(`SHAPES: use BUBBLES derived from the two circles in the TikTok logo; CTAs are word-holding bubble buttons. Do not use generic web pills for labels. Images may rotate in ${rot}° increments.`);
   }
 
   return lines.join("\n");
@@ -471,10 +474,6 @@ function summarizeBrief(brief) {
   if (brief.typeScale && String(brief.typeScale).trim()) {
     lines.push(`TYPE SCALE DIRECTION: ${String(brief.typeScale).trim()}`);
   }
-  if (brief.imageDirective && String(brief.imageDirective).trim()) {
-    lines.push(`IMAGERY: ${String(brief.imageDirective).trim()}`);
-  }
-
   if (!lines.length) return "";
   return `\nBUILD BRIEF (apply every directive — these come from the planning agents):\n` +
     lines.map((l) => `- ${l}`).join("\n") + "\n";
@@ -511,7 +510,7 @@ function summarizeBrief(brief) {
  *
  * TYPED BUILD BRIEF (Phase 2.3 — NO dropped agent output):
  *   `brief` is the typed {copy, sectionOrder, layoutDirection, typeScale,
- *   imageDirective, mustFix[]} object the orchestrator assembles from every
+ *   mustFix[]} object the orchestrator assembles from every
  *   non-builder agent's named slot (CONTRACTS §6). codexBuildSite consumes the WHOLE
  *   brief: each filled slot becomes an explicit prompt directive and `brief.mustFix`
  *   is merged into the verbatim fix-rules. Absent/empty => the build is unchanged
@@ -520,7 +519,7 @@ function summarizeBrief(brief) {
  * @param {{brand:object, goal:string, copyHint?:string, lesson?:string,
  *          rules?:string[], priorHtml?:(string|null),
  *          brief?:{copy?:(string|{hero?:string,angle?:string}), sectionOrder?:string[],
- *                  layoutDirection?:string, typeScale?:string, imageDirective?:string,
+ *                  layoutDirection?:string, typeScale?:string,
  *                  mustFix?:string[]}}} args
  * @returns {Promise<string>} clean HTML document string (with inlined DS css)
  */
@@ -559,7 +558,7 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
   // planner's full plan, or the default pool trimmed to SECTION_COUNT.
   const sectionCount = sections.length;
 
-  // Weave the remaining typed brief slots (copy/layout/type/image directives) into a
+  // Weave the remaining typed brief slots (copy/layout/type directives) into a
   // compact, named directives block consumed by BOTH the fresh + revise prompts so no
   // agent's output is dropped (Phase 2.3). Empty when no brief / no filled slots.
   const briefDirectives = summarizeBrief(brief);
@@ -641,22 +640,25 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
     `\nDESIGN SYSTEM: a full stylesheet is ALREADY INLINED in the page <head> in a <style> tag. ` +
     `It defines CSS variables (--color-splash, --color-razzmatazz, --color-primary, --color-secondary, ` +
     `--color-bg, --color-fg, --font-heading, --font-body, --font-emphasis, --space-1..--space-10, ` +
-    `--radius-sm/md/lg/pill) and READY .ds-* classes: foundations (.ds-body on <body>; .ds-section, ` +
-    `.ds-container, .ds-stack; .ds-h1, .ds-h2, .ds-subhead, .ds-lead, .ds-body-text, .ds-caption, ` +
+    `--radius-sm/md/lg, --radius-25/50/100, --radius-pill) and READY .ds-* classes: foundations (.ds-body on <body>; .ds-section, ` +
+    `.ds-container, .ds-stack; .ds-logo for official logo assets only; .ds-h1, .ds-h2, .ds-subhead, .ds-lead, .ds-body-text, .ds-caption, ` +
     `.ds-emph for ONE highlighted keyword; .ds-bg, .ds-bg-light, .ds-bg-primary, .ds-bg-secondary, ` +
     `.ds-surface, .ds-btn + .ds-btn-primary/.ds-btn-secondary/.ds-btn-outline/.ds-btn-on-primary/.ds-btn-ghost; ` +
-    `.ds-actions, .ds-link, .ds-figure (+ .ds-figure-25/.ds-figure-50/.ds-figure-bordered[-razz/-ink/-white]/.ds-rotate-10)), ` +
+    `.ds-actions, .ds-link, .ds-figure (+ .ds-figure-25/.ds-figure-50/.ds-figure-bordered[-razz/-ink/-white]/.ds-rotate[-n]10/.ds-rotate[-n]20)), ` +
     `and COMPOSED brand components: .ds-hero, .ds-feature-grid, .ds-stat-band, .ds-steps, .ds-cta-band, ` +
-    `.ds-bubble-cluster, .ds-chip, .ds-grid-2, .ds-grid-3; and the BRAND TOOLKIT: emphasis marks ` +
-    `.ds-mark(-cross/-chevron/-bracket)(-splash/-razz/-ink/-white), .ds-pattern(-splash/-razz/-ink) dot patterns, ` +
-    `.ds-bubble-text(-splash/-razz/-stroke) word-holding pills, .ds-emph-ink (black keyword emphasis), .ds-rrect-mixed; ` +
-    `and the EXPRESSIVE TYPE & EDITORIAL set (the keyless "image" system — type carries the page): ` +
+    `.ds-bubble-cluster, .ds-chip (non-CTA labels only), .ds-grid-2, .ds-grid-3; and the BRAND TOOLKIT: emphasis marks ` +
+    `.ds-mark(-cross/-chevron/-breadcrumbs/-bracket-round/-bracket-square/-mixed-cross)(-splash/-razz/-ink/-white), .ds-pattern(-lg/-dual/-overlap/-splash/-razz/-ink) dot/circle patterns, ` +
+    `.ds-bubble-text(-splash/-razz/-ink/-stroke[-splash/-razz/-ink]) word-holding bubbles, .ds-emph-ink (black keyword emphasis), ` +
+    `.ds-rrect-25/.ds-rrect-50/.ds-rrect-100/.ds-rrect-mixed/.ds-rrect-stroke, .ds-dma-lockup, .ds-phone-frame, .ds-super-bubble; ` +
+    `and the EXPRESSIVE TYPE & EDITORIAL set (type carries the page): ` +
     `.ds-display (MEGA hero type, the headline IS the visual), .ds-statement (full-bleed all-type section), ` +
     `.ds-text-outline (outline ONE word for filled+hollow contrast), .ds-quote + .ds-quote-attr (editorial ` +
     `pull-quote), .ds-bignum (oversized graphic number for a stat/proof), .ds-grid-asym (asymmetric editorial split).\n` +
     `BUILD USING THESE: put class="ds-body" on <body>; use the .ds-* classes and the ` +
     `var(--color-*)/var(--font-*)/var(--space-*) tokens for ALL styling. Do NOT hardcode hex colors ` +
     `or font stacks that the system already provides — reference the variables/classes. ` +
+    `Every Level 1 headline should carry two .ds-mark accents from DIFFERENT colors; the sentence-end mark must be .ds-mark-bracket-square/.ds-mark-bracket, not a curved mark. ` +
+    `.ds-pattern is a background/divider texture only: never put text on top of it, never put it on images, and never put it on a same/similar color field. ` +
     `Do NOT add Tailwind, Bootstrap, or any external CSS/CDN — the inlined design system is the ONLY stylesheet. ` +
     `Do NOT add your OWN <style> block, do NOT use inline style="" attributes, and do NOT invent new .ds-* class ` +
     `names (e.g. NO .ds-cta-frame, NO custom borders/frames) — compose ONLY from the .ds-* classes + var(--*) tokens ` +
@@ -664,19 +666,19 @@ export async function codexBuildSite({ brand, goal, copyHint, lesson, rules = []
     // §3b — COMPOSE the page from the NAMED components (no inline-style atoms, no
     // layout invented from scratch); both the fresh build AND the revise share this.
     `COMPOSE THE PAGE FROM THESE NAMED COMPONENTS (do NOT inline-style raw atoms, do NOT invent layout from ` +
-    `scratch): use .ds-hero for the opening — add the .ds-hero--type modifier (a full-bleed SINGLE-COLUMN type hero, no media half) whenever no hero image is provided, else the split .ds-hero; .ds-feature-grid with .ds-grid-3 ` +
+    `scratch): use .ds-hero.ds-hero--type for the opening — a full-bleed SINGLE-COLUMN type hero with no media half; .ds-feature-grid with .ds-grid-3 ` +
     `for features; .ds-stat-band for proof numbers; .ds-steps with .ds-grid-3 for how-it-works; ` +
     `.ds-cta-band for the closing call to action; .ds-figure (with .ds-figure-25/.ds-figure-50 and ` +
-    `an optional .ds-rotate-10) for ALL imagery; .ds-bubble-cluster for the signature overlapping-circle ` +
-    `accent; .ds-chip for eyebrow labels; and .ds-grid-2/.ds-grid-3 for any multi-column row. Drop the ` +
+    `optional 10°-increment rotation classes) only when it is part of a CSS/type composition; .ds-bubble-cluster for the signature overlapping-circle ` +
+    `accent; .ds-chip only for small non-CTA labels; and .ds-grid-2/.ds-grid-3 for any multi-column row. Drop the ` +
     `skeletons in and fill real copy — do NOT rebuild these from <div>s + inline styles.\n` +
-    // IMAGERY POLICY (build-quality): render ONLY provided imagery; never invent any.
-    `IMAGERY — render ONLY imagery explicitly PROVIDED to you: a hero <img src> when one is supplied, or a ` +
-    `provided inline-SVG directive. Do NOT INVENT imagery of your own: NO abstract colored-block art, NO bare ` +
-    `<rect>/<svg> shapes or grey skeleton bars, NO 3D icons, NO app-icon/logo marks (the brand wordmark is TEXT, ` +
-    `not a drawn logo), NO stock-style photos, NO decorative illustrations you made up. If NO hero image is ` +
-    `provided, you MUST use the .ds-hero--type modifier on .ds-hero — a FULL-BLEED, SINGLE-COLUMN TYPE hero: an ` +
-    `oversized .ds-hero-title that fills the width (NO empty media half), a strong subhead, and the pill CTAs. Do ` +
+    // Visual policy: use the design system and type composition; do not fabricate media.
+    `VISUAL POLICY — do not fabricate media: NO abstract colored-block art, NO bare ` +
+    `<rect>/<svg> shapes or grey skeleton bars, NO 3D icons, NO app-icon/logo marks, NO typed/fake logo or wordmark ` +
+    `(use an official logo asset only; if none is supplied, mention TikTok For Business only in ordinary copy), ` +
+    `NO stock-style photos, NO decorative illustrations you made up. You MUST use the ` +
+    `.ds-hero--type modifier on .ds-hero — a FULL-BLEED, SINGLE-COLUMN TYPE hero: an ` +
+    `oversized .ds-hero-title that fills the width, a strong subhead, and brand bubble CTAs. Do ` +
     `NOT place a .ds-bubble-cluster above the headline; if you use one it MUST contain its .ds-bubble circles ` +
     `(NEVER emit an empty .ds-bubble-cluster — it renders as a huge dead box). OMIT every empty .ds-figure frame entirely ` +
     `(never leave a media slot blank). Keep the page DENSE — substantial .ds-card surfaces for feature/step ` +
@@ -737,18 +739,18 @@ OUTPUT ONLY the corrected HTML document, from <!DOCTYPE html> to </html>. No com
     // Every rule stated ONCE; section-by-section jobs; the brand copy engine drives the hero;
     // fix-rules (if any) are recency-anchored + verify-gated right before the output contract.
     prompt =
-`You are a senior brand designer building ONE self-contained marketing homepage for ${goal}, on top of a design system that is ALREADY INLINED for you (CSS variables + .ds-* classes). This is a KEYLESS page — there are NO photographs. TYPE is the artwork.
+`You are a senior brand designer building ONE self-contained marketing homepage for ${goal}, on top of a design system that is ALREADY INLINED for you (CSS variables + .ds-* classes). TYPE is the artwork.
 
 Your job is not to fill a template. Make ONE confident, unmistakable move that embodies "${brand.tagline || "the brand at its best"}" — its energy, attitude, editorial boldness — and build the page around it. A flawless-but-safe page scores ~75; a page with a real bold move and sharp copy scores 90+. Reach for the 90.
 ${brandVoice}
 THE PAGE — build EXACTLY ${sectionCount} sections, in order: ${sections.join(", ")}. Give each section a clear JOB and let a NAMED .ds-* component carry it (drop the skeleton in, fill real copy — never rebuild it from raw <div>s). Alternate full-bleed color fields (black → white → Razzmatazz) so the page has rhythm; never stack two identical centered blocks in a row.
-- HERO: a type-led opening. Use .ds-hero with the .ds-hero--type modifier (full-bleed single column, NO media half) and a MEGA .ds-display headline built on the copy engine "${brand.copyPattern || "Don't Make Ads. Make ___."}" — the headline IS the visual, with ONE word in .ds-emph. Add a subhead + two pill CTAs. This is the page's bold move; spend your best copy here.
+- HERO: a type-led opening. Use .ds-hero with the .ds-hero--type modifier (full-bleed single column, NO media half) and a MEGA .ds-display headline built on the copy engine "${brand.copyPattern || "Don't Make Ads. Make ___."}" — the headline IS the visual, with ONE word in .ds-emph and two different-color .ds-mark accents bracketing the H1 (sentence-end mark must be square). Add a subhead + two brand bubble CTAs using .ds-btn variants. This is the page's bold move; spend your best copy here.
 - MIDDLE sections (problem / how-it-works / proof): give each ONE distinct treatment so they don't read the same — a .ds-statement full-bleed type moment for the core tension; a proof section anchored by an oversized .ds-bignum (one real number) or a .ds-stat-band; a how-it-works from .ds-steps + .ds-grid-3, OR features from .ds-feature-grid + .ds-grid-3; and at least one .ds-grid-asym asymmetric split and/or one .ds-quote (+ .ds-quote-attr) pull-quote for credibility. Vary alignment and which component leads. Fill every card/step with real copy — no bare text floating in a band.
-- CLOSE: .ds-cta-band > .ds-container > .ds-cta-inner exactly (no wrapping frame). Oversized headline, one pill CTA.
+- CLOSE: .ds-cta-band > .ds-container > .ds-cta-inner exactly (no wrapping frame). Oversized headline, one brand bubble CTA.
 
-TYPE CARRIES THE PAGE (no images): with no photography, type is the visual system. Reach for .ds-display (mega, ultra-tight headline), .ds-statement (full-bleed all-type panel), .ds-text-outline (outline ONE word — a single word, never a whole headline), .ds-quote, and .ds-bignum (oversized numeral anchoring a stat). A flat text-only page must read as BOLD and editorial — never as a clean-but-generic landing page. Optional accents — .ds-mark glyphs, .ds-pattern dot textures, .ds-bubble-text pills — only when they sit tight and intentional. Don't force an accent onto every section.
+TYPE CARRIES THE PAGE: type is the visual system. Reach for .ds-display (mega headline with 120% leading), .ds-statement (full-bleed all-type panel), .ds-text-outline (outline ONE word — a single word, never a whole headline), .ds-quote, and .ds-bignum (oversized numeral anchoring a stat). A flat text-only page must read as BOLD and editorial — never as a clean-but-generic landing page. H1 accents are not optional: use .ds-mark glyphs from the brand library, two different colors, with a square end mark. Patterns and word bubbles are optional accents only when they sit tight and intentional; patterns never sit under text or on imagery.
 
-BUILD WITH THE SYSTEM: put class="ds-body" on <body> and style everything with the var(--color-*) / var(--font-*) / var(--space-*) tokens — never hardcode hex or font stacks. Use generous section padding (96–128px). Compose ONLY from these classes (invent no new .ds-* names): foundations (.ds-section/.ds-container/.ds-stack, .ds-h1/.ds-h2/.ds-subhead/.ds-lead/.ds-body-text/.ds-caption, .ds-emph + .ds-emph-ink, .ds-bg/.ds-bg-light/.ds-bg-primary/.ds-bg-secondary, .ds-btn + variants, .ds-actions, .ds-chip eyebrows, .ds-link); components (.ds-hero[+--type], .ds-feature-grid, .ds-stat-band, .ds-steps, .ds-cta-band, .ds-grid-2/.ds-grid-3/.ds-grid-asym, .ds-figure[-25/-50/-bordered/-rotate-10]); editorial type (.ds-display, .ds-statement, .ds-text-outline, .ds-quote, .ds-bignum); accents (.ds-mark[-cross/-chevron/-bracket], .ds-pattern, .ds-bubble-text, .ds-bubble-cluster).
+BUILD WITH THE SYSTEM: put class="ds-body" on <body> and style everything with the var(--color-*) / var(--font-*) / var(--space-*) tokens — never hardcode hex or font stacks. Use generous section padding (96–128px). Compose ONLY from these classes (invent no new .ds-* names): foundations (.ds-section/.ds-container/.ds-stack, .ds-logo for official logo assets only, .ds-h1/.ds-h2/.ds-subhead/.ds-lead/.ds-body-text/.ds-caption, .ds-emph + .ds-emph-ink, .ds-bg/.ds-bg-light/.ds-bg-primary/.ds-bg-secondary, .ds-btn + variants for CTA bubbles, .ds-actions, .ds-chip for small non-CTA labels only, .ds-link); components (.ds-hero[+--type], .ds-feature-grid, .ds-stat-band, .ds-steps, .ds-cta-band, .ds-grid-2/.ds-grid-3/.ds-grid-asym, .ds-figure[-25/-50/-bordered/-rotate-10/-rotate-n10/-rotate-20/-rotate-n20], .ds-phone-frame, .ds-super-bubble); editorial type (.ds-display, .ds-statement, .ds-text-outline, .ds-quote, .ds-bignum, .ds-dma-lockup); accents (.ds-mark[-cross/-chevron/-breadcrumbs/-bracket-round/-bracket-square/-mixed-cross], .ds-pattern[-lg/-dual/-overlap], .ds-bubble-text[-splash/-razz/-ink/-stroke-splash/-stroke-razz/-stroke-ink], .ds-bubble-cluster, .ds-rrect-*).
 
 DESIGN TOKENS (exact values):
 ${tokenSummary}
@@ -757,11 +759,12 @@ RULES — obey every one (this is the whole list; each stated ONCE):
 2. ONE brand color per composition, paired with black or white; never two brand colors fighting in one composition; never invent a color; grey is for borders/muted captions only, never a composition background.
 3. Razzmatazz (#FE2C55) emphasizes text; Splash (#25F4EE) is a full-bleed field or figure border ONLY and NEVER touches text (on a Splash field, text is black). Black (.ds-emph-ink) is also a legal text emphasis. Two colors max in any text treatment.
 4. Type: no all-caps/all-lowercase headlines; never set body copy bold; keep size steps clearly distinct (big headings).
-5. Invent NO imagery: no fake <svg>/<rect> art, no icons, no logo marks, no placeholder bars — the wordmark is TEXT. Render only imagery explicitly provided; any image goes in a .ds-figure, never a bare rectangle.
-6. WHEN IN DOUBT, OMIT. A floating, detached, or clipped accent is WORSE than none — leave it out. No dead voids, no empty bands.
-7. Real marketing copy only — no lorem, no placeholder. Headlines under 8 words, concrete, native; banned filler: "built for discovery", "best-in-class", "unlock growth", "supercharge", "share of voice".
-8. Stay inside the system: no Tailwind/Bootstrap/CDN font, no your own <style> block, no inline style="" attributes. The inlined design system is the only stylesheet.
-9. BRAND DON'Ts (must obey): ${JSON.stringify(donts)}.
+5. H1 headlines use two emphasis marks from the brand library; the final mark must be square, not curved. Patterns divide/create flow only on high-contrast or non-matching fields; never under text, on images, or on same-color backgrounds.
+6. Do not fabricate media: no fake <svg>/<rect> art, no icons, no app/logo marks, no placeholder bars, no typed/fake TikTok logo or wordmark. If no official logo asset is supplied, mention TikTok For Business only in ordinary copy. Use type, layout, and the design-system components for visual impact.
+7. WHEN IN DOUBT, OMIT. A floating, detached, or clipped accent is WORSE than none — leave it out. No dead voids, no empty bands.
+8. Real marketing copy only — no lorem, no placeholder. Headlines under 8 words, concrete, native; banned filler: "built for discovery", "best-in-class", "unlock growth", "supercharge", "share of voice".
+9. Stay inside the system: no Tailwind/Bootstrap/CDN font, no your own <style> block, no inline style="" attributes. The inlined design system is the only stylesheet.
+10. BRAND DON'Ts (must obey): ${JSON.stringify(donts)}.
 ${briefDirectives}${numberedRules ? `\nBEFORE YOU OUTPUT — apply EVERY fix below to THIS build. These are real critique findings; for each, make the named defect visibly DISAPPEAR in the final HTML (not merely acknowledged):\n${numberedRules}\n` : ""}
 OUTPUT ONLY the HTML document, from <!DOCTYPE html> to </html>. No commentary, no markdown fences, no shell commands. The design-system <style> is inlined for you — do not include it.`;
   }
@@ -940,7 +943,7 @@ function clamp0to100(n) {
 
 /**
  * TWO-AXIS design judge (v3.1, all-LLM, NO regex). Runs Codex gpt-5.4 (vision via
- * `-i` on the rendered screenshot, MEDIUM effort by default; override with
+ * `-i` on the rendered screenshot, HIGH effort by default; override with
  * CODEX_JUDGE_EFFORT) and asks for the two raw axes DIRECTLY:
  *   - `quality`        0-100 — design quality (hierarchy, layout, legibility, copy)
  *   - `brandAdherence` 0-100 — brand fit (palette, tone, DON'T compliance)
@@ -1032,8 +1035,8 @@ export async function codexJudge({ brand, html, goal, imagePath }) {
       `PAGE HTML:\n<<<HTML\n${html}\nHTML\n\n` +
       jsonInstr;
 
-  // MEDIUM reasoning (2.7) — faster than HIGH; keep the vision (-i) image path.
-  // Override via CODEX_JUDGE_EFFORT. gen-loop caller: 0 retries (fail fast).
+  // HIGH reasoning by default; override via CODEX_JUDGE_EFFORT. gen-loop caller:
+  // 0 retries (fail fast).
   const raw = await codexRun(prompt, {
     effort: JUDGE_EFFORT,
     timeoutMs: 180_000,
@@ -1090,9 +1093,10 @@ export function designInventory(brand) {
     "or not using the right one): .ds-hero/.ds-hero--type, .ds-display (mega headline), .ds-statement (full-bleed " +
     "type moment), .ds-quote + .ds-quote-attr (pull-quote), .ds-bignum (oversized stat number), .ds-grid-asym " +
     "(asymmetric split), .ds-feature-grid, .ds-stat-band, .ds-steps, .ds-cta-band, .ds-card/.ds-surface/.ds-feature, " +
-    ".ds-chip (eyebrow pills), .ds-emph (ONE-keyword Razzmatazz emphasis).\n" +
-    "DO NOT flag decorative marks/patterns/bubbles (.ds-mark/.ds-pattern/.ds-bubble) as gaps — they are optional " +
-    "and already over-used. PRIORITIZE fixing real craft problems (dead voids, cramped/awkward sections, weak " +
+    ".ds-chip (small non-CTA labels), .ds-emph (ONE-keyword Razzmatazz emphasis).\n" +
+    "Flag missing H1 emphasis marks as a real brand-system gap: every H1 should have two different-color .ds-mark accents, " +
+    "with a square mark at sentence end. DO NOT suggest patterns/bubbles just for decoration; use .ds-pattern only as a " +
+    "non-text divider/background and .ds-bubble-text only when it holds words. PRIORITIZE fixing real craft problems (dead voids, cramped/awkward sections, weak " +
     "hierarchy, poor contrast, washed-out text) over adding any component.";
   return tokens + "\n" + components;
 }
@@ -1134,11 +1138,11 @@ export async function codexCritique({ brand, screenshotPath, goal, html, invento
     ? `DESIGN SYSTEM INVENTORY (audit the page for GAPS — tokens/components below that are MISSING or UNDERUSED on the rendered page):\n${inv}\n\n`
     : "";
   const upgradeField = inv
-    ? ` "upgrade": "<the SINGLE highest-value improvement NOW: PREFER fixing a recurring CRAFT problem (a dead void, a cramped/awkward section, weak hierarchy, washed-out or low-contrast text) in a specific SECTION; only if there is a genuine STRUCTURAL gap should you name a .ds layout/type component to use. ONE area, surgical. Do NOT suggest adding decorative marks/patterns/bubbles.>",\n`
+    ? ` "upgrade": "<the SINGLE highest-value improvement NOW: PREFER fixing a recurring CRAFT problem (a dead void, a cramped/awkward section, weak hierarchy, washed-out or low-contrast text) in a specific SECTION; if any H1 lacks the required two emphasis marks, name that as the structural brand gap. Otherwise name one .ds layout/type component only when there is a genuine gap. ONE area, surgical. Do NOT suggest decorative patterns/bubbles.>",\n`
     : ` "upgrade": "<the SINGLE highest-leverage CONSTRUCTIVE move that would take this page from good to EXCEPTIONAL — a bold, SPECIFIC art-direction or copy upgrade that embodies the brand at its BEST (lean into a brand strength; name the .ds component or section to change). This is NOT a flaw fix — it is what would make the page a 90+ instead of a competent 75.>",\n`;
   const upgradeRule = inv
-    ? `- upgrade: pick the ONE biggest gap vs the inventory (a token/component the page should use but doesn't, in a specific section). Keep it SMALL + surgical — one area. NO photos/images/video. NEVER empty.\n`
-    : `- upgrade: be specific and ambitious — the ONE change with the biggest quality payoff, even if the page has NO flaws. NEVER leave it empty. CONSTRAINT: this page has NO photographs and none can be added — propose a TYPE, LAYOUT, or COPY upgrade ONLY (e.g. mega .ds-display type, an asymmetric .ds-grid-asym split, a .ds-quote pull-quote, a .ds-bignum stat). NEVER suggest adding a photo/image/video.\n`;
+    ? `- upgrade: pick the ONE biggest gap vs the inventory (a token/component the page should use but doesn't, in a specific section). Keep it SMALL + surgical — one area. Do not suggest photos/images/video unless approved assets are already supplied; otherwise propose type/layout/copy/toolkit upgrades only. NEVER empty.\n`
+    : `- upgrade: be specific and ambitious — the ONE change with the biggest quality payoff, even if the page has NO flaws. NEVER leave it empty. If no approved media assets are supplied, propose a TYPE, LAYOUT, COPY, or toolkit upgrade only (e.g. mega .ds-display type, an asymmetric .ds-grid-asym split, a .ds-quote pull-quote, a .ds-bignum stat); if approved media is supplied, apply the PDF photography/video/phone-frame rules.\n`;
 
   const jsonInstr =
     `Return ONLY a JSON OBJECT (no prose, no markdown fences):\n` +
@@ -1171,7 +1175,7 @@ export async function codexCritique({ brand, screenshotPath, goal, html, invento
 
   let raw;
   try {
-    // MEDIUM reasoning (matches the judge); gen-loop caller: 0 retries (fail fast).
+    // HIGH reasoning by default (matches the judge); gen-loop caller: 0 retries (fail fast).
     raw = await codexRun(prompt, {
       effort: JUDGE_EFFORT,
       timeoutMs: 180_000,
@@ -1323,13 +1327,12 @@ async function runSmoke() {
     copy: { hero: "Go viral. Get customers.", angle: "punchy, founder-to-founder" },
     layoutDirection: "asymmetric hero, 3-up proof grid",
     typeScale: "oversized display H1",
-    imageDirective: "flat brand-color hero illustration",
     mustFix: ["this is handled as a fix-rule, not echoed here"],
   });
   log(/HERO COPY: Go viral/.test(briefStr) && /COPY ANGLE: punchy/.test(briefStr),
     "brief: copy {hero,angle} woven");
-  log(/LAYOUT: asymmetric/.test(briefStr) && /TYPE SCALE DIRECTION: oversized/.test(briefStr) &&
-    /IMAGERY: flat brand-color/.test(briefStr), "brief: layout/type/image slots woven");
+  log(/LAYOUT: asymmetric/.test(briefStr) && /TYPE SCALE DIRECTION: oversized/.test(briefStr),
+    "brief: layout/type slots woven");
   log(!/mustFix|handled as a fix-rule/.test(briefStr), "brief: mustFix is NOT echoed (it's merged into fix-rules)");
   log(summarizeBrief(null) === "" && summarizeBrief({}) === "",
     "brief: empty/absent brief => empty block (back-compat)");
@@ -1338,7 +1341,7 @@ async function runSmoke() {
   log(normalizeSandbox(undefined) === "read-only" && normalizeSandbox("anything") === "read-only",
     "sandbox: default + unknown => read-only (never silently widened)");
   log(normalizeSandbox("workspace-write") === "workspace-write",
-    "sandbox: explicit workspace-write honored (CODEX_IMAGE opt-in path)");
+    "sandbox: explicit workspace-write honored");
 
   // 5) Hang-kill: a stubbed hanging child is SIGKILLed (Phase 0.1 accept).
   await new Promise((done) => {

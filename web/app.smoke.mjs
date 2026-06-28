@@ -34,6 +34,10 @@ ok(!!T && typeof T.mineTokens === "function", "Node-load exposes pure test hook 
 ok(T.headlineFromGens([40, 55, 52, 71]) === 71, "headline = max per-gen score (monotonic)");
 ok(T.headlineFromGens([60, 50, 45]) === 60, "headline holds the peak even when later gens dip");
 ok(T.headlineFromGens([]) === 0, "headline defaults to 0 with no gens");
+ok(T.htmlRefForIframe({ type: "score.updated", htmlRef: "snapshots/kept.html", reverted: true }) === "snapshots/kept.html",
+  "score.updated htmlRef can drive the iframe to the kept page after a revert");
+ok(T.htmlRefForIframe({ type: "score.updated" }) === "",
+  "score.updated without htmlRef does not drive the iframe");
 
 // 2. Chart y-scaling maps the 0..100 judge range into the chart band correctly:
 //    score 100 -> top (padT), score 0 -> bottom (padT+innerH), monotonic decreasing.

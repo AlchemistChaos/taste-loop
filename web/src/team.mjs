@@ -12,8 +12,8 @@
 // traces/lessons recalled from EARLIER TURNS IN THIS RUN and decides the roster +
 // per-agent tools FROM them — so the *team* improves turn-over-turn, not just the
 // page. The lesson->capability reasoning lives in the master PROMPT (not a regex
-// ladder): a contrast lesson makes the master field contrast_check, an imagery
-// lesson makes it grant image_gen, etc. repairTeam is only a thin invariant guard.
+// ladder): a contrast lesson makes the master field contrast_check, a voice lesson
+// makes it field copy_lint, etc. repairTeam is only a thin invariant guard.
 //
 // This is the authoring brain. It is NOT cosmetic: the orchestrator spawns exactly
 // these agents and every one runs its master-authored instructions with its granted
@@ -70,7 +70,6 @@ export const ROLE_PALETTE = [
   "typographer",         // type scale / pairing within approved fonts
   "visual-designer",     // art-directs the on-brand layout (flat color blocks)
   "frontend-implementer",// builds the real, self-contained HTML page (produces html)
-  "image-sourcer",       // on-brand imagery / inline SVG (no generic AI stock)
   "critique",            // brutal brand-rule audit (produces critique)
   "brand-guardian",      // memory studio: enforces recalled, checkable brand rules
 ];
@@ -130,7 +129,6 @@ function masterSystemPrompt({ isMemory }) {
     "  - a contrast / legibility / accent-on-CTA lesson -> GRANT contrast_check (and a11y_check) to the auditor;",
     "  - an accessibility / alt-text / aria / focus-state lesson -> GRANT a11y_check to the auditor or builder;",
     "  - a voice / jargon / buzzword lesson -> GRANT copy_lint to the copywriter or critique;",
-    "  - a weak / generic / off-brand imagery lesson -> GRANT image_gen to the builder or image-sourcer.",
     "If a recalled lesson implies a capability and you do NOT field an agent holding the matching tool, the page",
     "will repeat the mistake — so let the recalled memory reshape BOTH the roster and the per-agent toolsets.",
     "",
@@ -170,7 +168,7 @@ function masterSystemPrompt({ isMemory }) {
     '      "role": "<one of the allowed roles>",',
     '      "instructions": "<the real, specific, brand-voiced prompt this agent runs on>",',
     '      "tools": ["<allowed tool>", ...],',
-    '      "produces": "<short noun for the artifact this agent yields, e.g. brandspec|copy|layout|html|critique|imagery|ia|typescale>"' +
+    '      "produces": "<short noun for the artifact this agent yields, e.g. brandspec|copy|layout|html|critique|ia|typescale>"' +
       (isMemory
         ? ','
         : ''),
@@ -195,8 +193,8 @@ function masterUserPrompt({ brand, goal, isMemory, lessons }) {
         "",
         `RECALLED LESSONS from EARLIER TURNS IN THIS RUN (${lessons.length}) — these were learned this run and`,
         "MUST be woven verbatim into the instructions of the agents who can enforce them, AND must drive which",
-        "tools you grant (a contrast lesson -> contrast_check on the auditor, an imagery lesson -> image_gen on",
-        "the builder, etc.):",
+        "tools you grant (a contrast lesson -> contrast_check on the auditor, a voice lesson -> copy_lint on",
+        "the copywriter, etc.):",
         ...lessons.map((l, i) => `  ${i + 1}. ${typeof l === "string" ? l : (l.statement || "")}`),
       ].join("\n")
     : (isMemory
@@ -268,8 +266,6 @@ function defaultInstructions(role, { brand, goal }) {
       return `Art-direct an on-brand layout using FLAT brand-color blocks only (${c.primary}/${c.accent} on ${c.bg}/${c.fg}). Strong hierarchy, generous whitespace, the primary CTA visually dominant. Obey the DON'Ts ${donts} exactly.`;
     case "frontend-implementer":
       return `Build a single self-contained, responsive HTML5 page with exactly 5 sections (${JSON.stringify(brand?.sections || [])}) for "${goal}". Use the real brand tokens (colors ${c.primary}/${c.accent}, fonts ${brand?.fonts?.heading}), flat color blocks only, real on-brand copy, strong hierarchy, and prominent CTAs. Obey every DON'T: ${donts}.`;
-    case "image-sourcer":
-      return `Provide on-brand imagery or inline SVG that reinforces the ${tone} voice — no generic AI stock, no off-palette colors. Keep visuals flat and aligned to ${c.primary}/${c.accent}.`;
     case "critique":
       return `Brutally audit the built page against the brand rules. List concrete, actionable violations — especially any breach of the DON'Ts ${donts}. Be specific and unforgiving; flag anything off-brand.`;
     case "brand-guardian":
@@ -486,7 +482,6 @@ function repairTeam(raw, ctx) {
     typographer: "typescale",
     "visual-designer": "layout",
     "frontend-implementer": "html",
-    "image-sourcer": "imagery",
     critique: "critique",
     "brand-guardian": "guard",
   };

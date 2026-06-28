@@ -20,22 +20,13 @@
   ],
   "audience": "creators & businesses on TikTok",
   "do": [
-    "Be confident yet humble",
-    "Be playful",
-    "Get to the point",
-    "Keep it casual",
-    "Write the way people talk",
-    "Be provocative",
+    "be confident yet humble",
+    "get to the point",
+    "write the way people talk",
     "use one brand color per composition (flat color blocks)",
     "pair brand colors with black or white for focus"
   ],
   "dont": [
-    "Brag or act cocky",
-    "Try too hard",
-    "Forget to have some fun along the way",
-    "Forget you're talking to marketers who need results",
-    "Write sloppy",
-    "Be mean or derisive",
     "Do not use gradients",
     "do not create new colors",
     "no more than one emphasis color per headline",
@@ -84,7 +75,10 @@
     "full": "TikTok For Business",
     "capitalF": true,
     "rule": "When a non-logo version of our brand is required, i.e., in copy form, the full name of our brand should always be represented as TikTok For Business. This is to be the case for all consumer and public-facing instances. Uppercase 'F' to be used at all times (For), as we should always treat the brand as a proper noun.",
-    "abbreviations": ["TT4B", "TTFB"],
+    "abbreviations": [
+      "TT4B",
+      "TTFB"
+    ],
     "abbreviationsInternalOnly": true
   },
   "audienceSegments": [
@@ -107,11 +101,43 @@
   ],
   "audienceAge": "16-34",
   "photography": {
-    "mood": ["real", "fun", "bold", "lighthearted", "optimistic", "action-oriented"],
-    "style": ["natural light", "colorful", "active"],
-    "composition": ["open with negative space"],
-    "content": ["diverse cast", "animals", "action", "DIY", "art", "food", "gaming", "creativity", "community"],
-    "diversity": ["race", "culture", "gender", "age", "size", "abilities", "socioeconomic", "region"],
+    "mood": [
+      "real",
+      "fun",
+      "bold",
+      "lighthearted",
+      "optimistic",
+      "action-oriented"
+    ],
+    "style": [
+      "natural light",
+      "colorful",
+      "active"
+    ],
+    "composition": [
+      "open with negative space"
+    ],
+    "content": [
+      "diverse cast",
+      "animals",
+      "action",
+      "DIY",
+      "art",
+      "food",
+      "gaming",
+      "creativity",
+      "community"
+    ],
+    "diversity": [
+      "race",
+      "culture",
+      "gender",
+      "age",
+      "size",
+      "abilities",
+      "socioeconomic",
+      "region"
+    ],
     "imageMasks": "Imagery is cropped in rounded rectangle frames with 25% or 50% roundness. Images can be rotated, in 10-degree increments, to create fun and dynamic compositions.",
     "coloredBorders": "Key imagery can be highlighted with Splash, Razzmatazz, Black or White for emphasis.",
     "guideline": "Photography, whether in selecting stock or actually shot, should always feature subject matter that is real, fun, bold, lighthearted, and optimistic. Every scenario should be action-oriented to engage the viewer, and invite them into each moment. They should never be passive or stagnant. It should never feel staged, cheesy, overly posed, or overproduced.",
@@ -137,7 +163,10 @@
     ]
   },
   "illustration": {
-    "mood": ["fun", "energetic"],
+    "mood": [
+      "fun",
+      "energetic"
+    ],
     "twist": "There's always opportunity to add a 'TikTok twist.'",
     "colorLimits": "primary = Razzmatazz/Splash/Black/White; secondary = extended palette",
     "dont": [
@@ -193,6 +222,8 @@
     }
   },
   "logo": {
+    "assetRequired": true,
+    "noTypedLogo": "Do not recreate the TikTok For Business logo or wordmark by typing it with a font. Use an official logo asset only; when no official asset is available, mention TikTok For Business in ordinary copy rather than presenting it as a logo.",
     "lockups": {
       "horizontal": "The horizontal lockup option is our primary and preferred option for most applications.",
       "vertical": "The vertical lockup option is our secondary option and best used in tight or vertically oriented applications such as portrait oriented business cards, social icons, 9x16 vertical video, etc."
@@ -223,9 +254,20 @@
   },
   "motion": {
     "feel": "efficient, smooth, fun",
-    "props": ["motion blur", "rotation", "scale"],
-    "allowedTransitions": ["glitch", "squash & stretch"],
-    "forbid": ["drop shadows", "gradients", "distorting end states"],
+    "props": [
+      "motion blur",
+      "rotation",
+      "scale"
+    ],
+    "allowedTransitions": [
+      "glitch",
+      "squash & stretch"
+    ],
+    "forbid": [
+      "drop shadows",
+      "gradients",
+      "distorting end states"
+    ],
     "verbatim": "Movement should feel efficient, smooth, and fun. Use motion blur, rotation, and scale animation properties to add fluidity. Do not add effects like drop shadows & gradients. Do not distort or manipulate the logo on end states. Glitch effects and squash and stretch are acceptable during transition states."
   },
   "emphasisRule": "Emphasize keywords with Razzmatazz + Sofia Pro Soft; include the trailing punctuation in the emphasis; Black is also a legal text-emphasis color; never Splash for text.",
@@ -238,6 +280,92 @@
       "Do not use color blocking to highlight text. Only highlight text by changing font color.",
       "Limit color usage to only two colors. (i.e., Black and Razzmatazz or White and Razzmatazz.)"
     ]
+  },
+  "designToolkit": {
+    "overview": "The core toolkit is rounded rectangles, bubbles, patterns, and emphasis marks, derived from the two circles in the TikTok For Business logo.",
+    "bubbles": {
+      "use": "Primarily CTA bubbles across digital assets; may add emphasis in print.",
+      "shape": "100% roundness stadium bubble that holds words.",
+      "colors": [
+        "Splash",
+        "Razzmatazz",
+        "Black"
+      ],
+      "variants": [
+        "fill",
+        "stroke"
+      ],
+      "digitalMinPx": 30,
+      "sourcePage": 40
+    },
+    "roundedRectangles": {
+      "use": "Primary use is image masks with colored borders; may also be layered as graphic elements/backgrounds.",
+      "colors": [
+        "Splash",
+        "Razzmatazz",
+        "Black",
+        "White"
+      ],
+      "variants": [
+        "fill",
+        "stroke"
+      ],
+      "roundness": [
+        "25%",
+        "50%",
+        "100%"
+      ],
+      "rules": [
+        "Up to two different curve proportions may be used in the same element.",
+        "Reserve 100% roundness for digital CTA buttons or layered graphic use.",
+        "Do not stack rounded rectangles of the same color."
+      ],
+      "sourcePages": [
+        41,
+        42,
+        46
+      ]
+    },
+    "patterns": {
+      "use": "Background/divider graphic elements that create visual interest and flow.",
+      "minCirclePx": [
+        20,
+        50
+      ],
+      "rules": [
+        "Use patterns on high-contrast backgrounds.",
+        "Use patterns to divide content and create flow.",
+        "Do not place patterns on images.",
+        "Do not place patterns on competing/clashing colors.",
+        "Do not place patterns on similar/same colors.",
+        "Do not place text on top of patterns."
+      ],
+      "sourcePages": [
+        43,
+        44,
+        46
+      ]
+    },
+    "emphasisMarks": {
+      "library": [
+        "Cross",
+        "Chevron",
+        "Breadcrumbs",
+        "Bracket (Round & Square)",
+        "Mixed Cross"
+      ],
+      "rules": [
+        "Add emphasis marks to all Level 1 headlines.",
+        "Prefer two marks: one at the beginning and one at the end of a headline.",
+        "Beginning and end marks should be different colors: Splash, Razzmatazz, Black, or White.",
+        "Use only square marks at the end of a sentence.",
+        "Size and align marks to the headline font x-height."
+      ],
+      "sourcePages": [
+        45,
+        46
+      ]
+    }
   },
   "globalPortfolio": {
     "insight": "In an age of informational overload, every business is desperate to be noticed.",
@@ -255,53 +383,20 @@
   },
   "platformManifesto": "Don't Make Ads. Make TikToks. If you want your business to be invisible, make an ad. Put it on Facebook or Instagram, or if you're feeling really nostalgic, TV. We block them, skip them, and invented the DVR just so we could fast-forward through. If you want your brand to get noticed... head to TikTok. It's a whole different ballgame over here, and we want you to come play with us. Come get discovered in a way you never thought you could. Just promise us one thing… Don't Make Ads. Make TikToks.",
   "_source": {
-    "pdf": "/Users/chaosalchemist/Desktop/TikTok_guidelines.pdf",
-    "method": "pdftotext -layout (real text) + pdftoppm render + vision/pixel verify + verbatim brand-book authoring from full guideline text (tiktok_text.txt)",
+    "pdf": "/Users/chaosalchemist/Github/taste-loop/TikTok_guidelines.pdf",
+    "method": "pdftotext -layout (real text) + pdftoppm render + vision/pixel verify",
     "pages": {
-      "platform_overview": 3,
+      "palette": 35,
+      "things_to_avoid_color": 37,
       "personality": 5,
       "tone": 6,
-      "tone_language_examples": 7,
-      "brand_treatment_naming": 8,
-      "logo_color_variations": 15,
-      "logo_scale": 16,
-      "logo_clearspace": 17,
-      "logo_placement": 20,
-      "logo_rotation": 21,
-      "logo_animation_motion": 22,
-      "logo_things_to_avoid": 25,
-      "typography": 27,
-      "headline_emphasis": 31,
-      "localization": 32,
-      "palette": 35,
-      "color_rules": 36,
-      "things_to_avoid_color": 37,
-      "photography_guidelines": 48,
-      "diversity": 49,
-      "photography_application": 50,
-      "photography_things_to_avoid": 51,
-      "video_rules": 52,
-      "video_rules_music_sfx": 53,
-      "video_dos_donts": 54,
-      "ad_videos": 56,
-      "ad_stills": 57,
-      "ad_graphics": 58,
-      "ad_banners": 59,
-      "ad_dos_donts": 60,
-      "vision": 64,
-      "promise": 65,
-      "audiences_verticals": 66,
-      "platform_manifesto": 67,
-      "copy_pattern": 68,
-      "portfolio_pattern_examples": 69,
-      "illustration": 70
+      "typography": 27
     },
     "hexFound": [
       "#FE2C55",
       "#25F4EE",
-      "#000000",
-      "#FFFFFF"
+      "#000000"
     ],
-    "derivedAt": "2026-06-21T22:22:41.749Z"
+    "derivedAt": "2026-06-28T12:22:45.136Z"
   }
 }
