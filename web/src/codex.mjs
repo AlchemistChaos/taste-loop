@@ -39,14 +39,17 @@
 //     file — far cleaner than scraping stdout (which is full of TUI chrome).
 //   * `-s read-only` + approval_policy=never => the agent cannot run shell tools
 //     and never blocks on a prompt; it just produces its final text answer.
-//   * One TikTok-site build took ~51s. We default the timeout to 180s.
+//   * One TikTok-site build took ~51s, but gpt-5.4 high on the fast tier spikes
+//     well past 180s on the full-page build (the design system is inlined into the
+//     prompt). The 180s default was killing the html builder (no fallback) and
+//     crashing the whole page on turn 0, so we default the timeout to 360s.
 //
 // Config (env overridable):
 //   CODEX_MODEL        default "gpt-5.4"
 //   CODEX_EFFORT       default "high"  (build + default reasoning effort)
 //   CODEX_JUDGE_EFFORT default "high"  (vision/text judge + critique effort)
 //   CODEX_SERVICE_TIER default "fast"  (set "off"/"none"/"0" to omit)
-//   CODEX_TIMEOUT      default 180000 ms
+//   CODEX_TIMEOUT      default 360000 ms
 //   CODEX_BIN          default "codex"
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -60,7 +63,7 @@ const MODEL = process.env.CODEX_MODEL || "gpt-5.4";
 const EFFORT = process.env.CODEX_EFFORT || "high";
 const JUDGE_EFFORT = process.env.CODEX_JUDGE_EFFORT || "high";
 const SERVICE_TIER = process.env.CODEX_SERVICE_TIER ?? "fast";
-const DEFAULT_TIMEOUT = Number(process.env.CODEX_TIMEOUT || 180_000);
+const DEFAULT_TIMEOUT = Number(process.env.CODEX_TIMEOUT || 360_000);
 const CODEX_BIN = process.env.CODEX_BIN || "codex";
 // Page sections: env-tunable (SECTIONS, default 5) so the page is RICH enough to
 // compose the full .ds-* component vocabulary (hero / problem / how-it-works / stats /
